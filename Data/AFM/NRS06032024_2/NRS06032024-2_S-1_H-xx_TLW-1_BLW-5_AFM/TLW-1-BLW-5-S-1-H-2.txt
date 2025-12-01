@@ -1,5 +1,5 @@
-X Unit:	MicroMeter
-Y Unit:	NanoMeter
+x(um)
+y(nm)
 
 X	Y
 0.0000	-178.680935337	

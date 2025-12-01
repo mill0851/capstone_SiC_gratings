@@ -3,6 +3,7 @@ import numpy as np
 import json
 import re
 from pathlib import Path
+import os
 
 def load_all_AFM(root_dir, sample_name="Unspecified"):
     afm_data = []
@@ -149,7 +150,7 @@ def plot_single_AFM(AFMx, AFMy, sample, grating, label='no label',
     plt.ylabel("Tip Vertical Position (um)", fontsize=30)
     plt.title(f"AFM: {sample}: {grating}", fontsize=30)
     plt.tick_params(axis='both', which='major', labelsize=30)
-    plt.legend(fontsize=30)
+    # plt.legend(fontsize=30)
     plt.show()
 
 def estimate_baseline_AFM(AFMx, AFMy_smooth, low_percentile=30, poly_deg=1):
@@ -303,7 +304,6 @@ def trapezoidal_fit_segments(segments, top_fraction=0.9):
             continue
 
         top_level = top_fraction * height
-        top_levels.append(top_level)
 
         # --- find first point >= top_level on the LEFT ---
         left_indices = np.where(ys >= top_level)[0]
@@ -325,9 +325,9 @@ def trapezoidal_fit_segments(segments, top_fraction=0.9):
             x_right_plateau = xs[R0]
 
             plateau_h = min(yL0,yR0)
-            print(plateau_h)
 
         # --- geometry for sides ---
+        top_levels.append(plateau_h)
         x0 = xs[0]
         xN = xs[-1]
 
@@ -457,4 +457,127 @@ def increase_point_density(x, y, n):
     y_list.append(y[-1])
 
     return np.array(x_list), np.array(y_list)
-    
+
+def set_processing_params(data_index,
+                        window_size_base,
+                        blw_lvl_base,
+                        tlw_lvl_base,
+                        window_size_adjustments=np.array([]),
+                        blw_lvl_adjustments=np.array([]),
+                        tlw_lvl_adjustments=np.array([])):
+    window_size = 0
+    if window_size_adjustments.any():
+        for adjustment in window_size_adjustments:
+            if data_index == adjustment[0]:
+                window_size = adjustment[1]
+    if not window_size:
+        window_size = window_size_base
+
+    blw_lvl = 0
+    if blw_lvl_adjustments.any():
+        for adjustment in blw_lvl_adjustments:
+            if data_index == adjustment[0]:
+                blw_lvl = adjustment[1]
+    if not blw_lvl:
+        blw_lvl = blw_lvl_base
+
+    tlw_lvl = 0
+    if tlw_lvl_adjustments.any():
+        for adjustment in tlw_lvl_adjustments:
+            if data_index == adjustment[0]:
+                tlw_lvl = adjustment[1]
+    if not tlw_lvl:
+        tlw_lvl = tlw_lvl_base
+
+    print('data index = ' + str(data_index))
+    print('tlw level = ' + str(tlw_lvl))
+    print('blw level = ' + str(blw_lvl))
+    print('window size = ' + str (window_size))
+
+    return window_size, blw_lvl, tlw_lvl
+
+def process_data(afm_data,
+                baseline_lvl,
+                min_segment_length,
+                interp_points,
+                window_size_base,
+                blw_lvl_base,
+                tlw_lvl_base,
+                window_size_adjustments=np.array([]),
+                blw_lvl_adjustments=np.array([]),
+                tlw_lvl_adjustments=np.array([])):
+    data_index = 0
+    for data in afm_data:
+
+        # ---- EXTRACT DATA ----
+        x = np.array(data['AFMx'])
+        y = np.array(data['AFMy'])
+        x_dense, y_dense = increase_point_density(x, y, interp_points) # Interpolation
+        sample = data['sample']
+        grating = tag = os.path.splitext(os.path.basename(data['grating']))[0]
+
+        # ---- DETERMINE GRATING PARAMETERS ----
+        window_size, blw_lvl, tlw_lvl = set_processing_params(data_index,
+                                                        window_size_base,
+                                                        blw_lvl_base,
+                                                        tlw_lvl_base, 
+                                                        window_size_adjustments=window_size_adjustments,
+                                                        blw_lvl_adjustments=blw_lvl_adjustments,
+                                                        tlw_lvl_adjustments=tlw_lvl_adjustments)
+        
+        # ---- DATA SMOOTHING ----
+        # Utilizes a moving average with a specified
+        # windoe size to remove noise
+        y_smooth = moving_average(y, window = window_size)
+        _, y_smooth_dense = increase_point_density(x, y_smooth, interp_points) # Interpolation
+
+        # ---- DATA LEVELING ----
+        # Fits a first degree polynomial (a line) to a specified
+        # percentile of data, then subtracts this fit from the data set
+        baseline = estimate_baseline_AFM(x_dense, y_smooth_dense, low_percentile=baseline_lvl)
+        y_smooth_level = y_smooth_dense - baseline
+        y_raw_level = y_dense - baseline
+        plot_single_AFM(x_dense,
+                    y_dense,
+                    sample,
+                    grating + f": Grating {data_index}",
+                    label="Raw Data Dense",
+                    AFMy_smooth1=(y_smooth_dense, 'Smooth Data Dense'),
+                    AFMy_smooth2=(baseline, 'BLW Cutoff'))
+        plot_single_AFM(x_dense,
+                    y_raw_level,
+                    sample,
+                    grating + f": Grating {data_index}",
+                    label='Raw Data Leveled',
+                    AFMy_smooth1=(y_smooth_level,'Smooth Data Leveled'),
+                    level1=(blw_lvl, f'BLW Cutoff = {blw_lvl}'))
+
+
+        # ---- DATA SEGMENTATION ----
+        # divides each data set into a set of data points
+        # for each grating groove in the set
+        grooves_raw = segment_structures_with_intersections(x_dense, y_raw_level, blw_lvl * np.max(y_raw_level), min_points=min_segment_length)
+        grooves_smooth = segment_structures_with_intersections(x_dense, y_smooth_level, blw_lvl * np.max(y_smooth_level), min_points=min_segment_length)
+
+        print("Number of grooves (raw) = " + str(len(grooves_raw)))
+        print("Number of grooves (smooth) = " + str(len(grooves_smooth)))
+
+        data['grooves raw'] = grooves_raw
+        data['grooves smooth'] = grooves_smooth
+        data['groove count'] = len(grooves_smooth)
+
+            # ---- DATA FITTING ----
+        # here we cut the data off at some percentage of the maximum
+        # value. The closest data point above this horizontal line determines
+        # the height of the trapezoid. A horizontal line is drawn from this
+        # point to the index of the closest point above the line on the opposite
+        # side of the groove. The edges are created by linearly interporlating
+        # from the first and last point to the line
+        groove_fits, tlw_heights = trapezoidal_fit_segments(grooves_smooth, top_fraction=tlw_lvl)
+        data['groove fits'] = groove_fits
+        data['tlw heights'] = tlw_heights
+
+        print("Fit Heights (um): " + str(tlw_heights))
+        print()
+
+        data_index += 1
