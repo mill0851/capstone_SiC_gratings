@@ -537,20 +537,20 @@ def process_data(afm_data,
         baseline = estimate_baseline_AFM(x_dense, y_smooth_dense, low_percentile=baseline_lvl)
         y_smooth_level = y_smooth_dense - baseline
         y_raw_level = y_dense - baseline
-        plot_single_AFM(x_dense,
-                    y_dense,
-                    sample,
-                    grating + f": Grating {data_index}",
-                    label="Raw Data Dense",
-                    AFMy_smooth1=(y_smooth_dense, 'Smooth Data Dense'),
-                    AFMy_smooth2=(baseline, 'BLW Cutoff'))
-        plot_single_AFM(x_dense,
-                    y_raw_level,
-                    sample,
-                    grating + f": Grating {data_index}",
-                    label='Raw Data Leveled',
-                    AFMy_smooth1=(y_smooth_level,'Smooth Data Leveled'),
-                    level1=(blw_lvl, f'BLW Cutoff = {blw_lvl}'))
+        # plot_single_AFM(x_dense,
+        #             y_dense,
+        #             sample,
+        #             grating + f": Grating {data_index}",
+        #             label="Raw Data Dense",
+        #             AFMy_smooth1=(y_smooth_dense, 'Smooth Data Dense'),
+        #             AFMy_smooth2=(baseline, 'BLW Cutoff'))
+        # plot_single_AFM(x_dense,
+        #             y_raw_level,
+        #             sample,
+        #             grating + f": Grating {data_index}",
+        #             label='Raw Data Leveled',
+        #             AFMy_smooth1=(y_smooth_level,'Smooth Data Leveled'),
+        #             level1=(blw_lvl, f'BLW Cutoff = {blw_lvl}'))
 
 
         # ---- DATA SEGMENTATION ----
@@ -577,7 +577,7 @@ def process_data(afm_data,
         data['groove fits'] = groove_fits
         data['tlw heights'] = tlw_heights
 
-        print("Fit Heights (um): " + str(tlw_heights))
+        print("Fit Heights (um):", *[round(x, 3) for x in tlw_heights])
         print()
 
         data_index += 1
