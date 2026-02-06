@@ -150,7 +150,7 @@ def plot_single_AFM(AFMx, AFMy, sample, grating, label='no label',
     plt.ylabel("Tip Vertical Position (um)", fontsize=30)
     plt.title(f"AFM: {sample}: {grating}", fontsize=30)
     plt.tick_params(axis='both', which='major', labelsize=30)
-    # plt.legend(fontsize=30)
+    plt.legend(fontsize=30)
     plt.show()
 
 def estimate_baseline_AFM(AFMx, AFMy_smooth, low_percentile=30, poly_deg=1):
@@ -496,6 +496,51 @@ def set_processing_params(data_index,
 
     return window_size, blw_lvl, tlw_lvl
 
+def fit_rmse(AFM_data):
+    for data in AFM_data:
+        fits = data["groove fits"]
+        afm = data['grooves smooth']
+        rmse_arr = []
+
+        for i in range(0,len(fits)):
+            rmse = np.sqrt(np.mean((afm[i][1] - fits[i][1])**2))
+            rmse_arr.append(rmse)
+        
+        data['rmse'] = rmse_arr
+
+def extract_tlw_blw(AFM_data):
+    for data in AFM_data:
+        tlw_arr = []
+        blw_arr = []
+        fits = data['groove fits']
+        heights = data['sH']
+
+        for i in range(0, len(fits)):
+            fit = fits[i]
+            height = heights[i]
+            x = fit[0]
+            y = fit[1]
+
+            blw = x[-1] - x[0]
+            top_indices = np.where(y == height)[0]
+            tlw = x[top_indices[-1]] - x[top_indices[0]]
+
+            tlw_arr.append(tlw)
+            blw_arr.append(blw)
+
+        tlw_mean = np.mean(tlw_arr)
+        tlw_std = np.std(tlw_arr)
+        blw_mean = np.mean(blw_arr)
+        blw_std = np.std(blw_arr)
+
+        data['sTLW mean'] = tlw_mean
+        data['sTLW std'] = tlw_std
+        data['sTLW'] = tlw_arr
+
+        data['sBLW mean'] = blw_mean
+        data['sBLW std'] = blw_std
+        data['sBLW'] = blw_arr
+
 def process_data(afm_data,
                 baseline_lvl,
                 min_segment_length,
@@ -575,9 +620,14 @@ def process_data(afm_data,
         # from the first and last point to the line
         groove_fits, tlw_heights = trapezoidal_fit_segments(grooves_smooth, top_fraction=tlw_lvl)
         data['groove fits'] = groove_fits
-        data['tlw heights'] = tlw_heights
+        data['sH'] = tlw_heights
+        data['sH mean'] = np.mean(tlw_heights)
+        data['sH std'] = np.std(tlw_heights)
 
         print("Fit Heights (um):", *[round(x, 3) for x in tlw_heights])
         print()
 
         data_index += 1
+    
+    fit_rmse(afm_data)
+    extract_tlw_blw(afm_data)
