@@ -85,8 +85,8 @@ def import_comsol_data(root_dir: str, meta_data_filename: str, data_filenames: L
     return data_final
 
 if __name__ == "__main__":
-    root_dir = r"C:\Users\robert\Code\capstone\capstone_SiC_gratings\data\ML\test_batch"
-    data = import_comsol_data(root_dir, "geometries.csv", ["reflectance.csv"], {"wavelength_um":"reflectance_0"})
+    root_dir = r"C:\Users\robert\Code\capstone\capstone_SiC_gratings\data\ML\tlw_debug_sweep"
+    data = import_comsol_data(root_dir, "metadata.csv", ["data.csv"], {"wavelength_um":"reflectance_0"})
 
     data_np = data.X_data_np
     meta_np = data.X_meta_np
