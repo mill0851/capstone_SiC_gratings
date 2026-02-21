@@ -1,4 +1,5 @@
 from util.data_preprocessing import *
+from util.Phase1Dataset import Phase1Dataset
 
 # ---- Import ----
 DATA_PATH = './data/batch1'
@@ -36,20 +37,28 @@ print(f'wavelength axis type: {type(wl)}\n')
 print(f'feature table:\n{features.head()}')
 print(f'feature table type: {type(features)}\n')
 
-for i in range(0,5):
-    plt.plot(wl, refl.iloc[i,:], label = f'curve {i+1}')
-plt.xlabel('Wavelength [um]', fontsize=18)
-plt.ylabel('Absorption [a.u.]', fontsize=18)
-plt.title('Normalized Absorption - Background Removes', fontsize=20)
-plt.legend(fontsize=16)
-plt.grid(alpha=0.8)
-plt.show()
+# for i in range(0,5):
+#     plt.plot(wl, refl.iloc[i,:], label = f'curve {i+1}')
+# plt.xlabel('Wavelength [um]', fontsize=18)
+# plt.ylabel('Absorption [a.u.]', fontsize=18)
+# plt.title('Normalized Absorption - Background Removes', fontsize=20)
+# plt.legend(fontsize=16)
+# plt.grid(alpha=0.8)
+# plt.show()
 
-for i in range(0,5):
-    plt.plot(refl.columns.to_numpy(), refl.iloc[i,:], label = f'curve {i+1}')
-plt.xlabel('Wavelength [um]', fontsize=18)
-plt.ylabel('Absorption [a.u.]', fontsize=18)
-plt.title('Normalized Absorption - Background Removes', fontsize=20)
-plt.legend(fontsize=16)
-plt.grid(alpha=0.8)
-plt.show()
+# for i in range(0,5):
+#     plt.plot(refl.columns.to_numpy(), refl.iloc[i,:], label = f'curve {i+1}')
+# plt.xlabel('Wavelength [um]', fontsize=18)
+# plt.ylabel('Absorption [a.u.]', fontsize=18)
+# plt.title('Normalized Absorption - Background Removes', fontsize=20)
+# plt.legend(fontsize=16)
+# plt.grid(alpha=0.8)
+# plt.show()
+
+dataset = Phase1Dataset(
+    geom_df = geom_values,
+    feat_df = features,
+    normalize_geom = True,
+    normalize_feat = True
+)
+
