@@ -61,4 +61,4 @@ dataset = Phase1Dataset(
     normalize_geom = True,
     normalize_feat = True
 )
-
+train_loader, val_loader = create_dataloaders(dataset, train_ratio=0.8, batch_size=32)

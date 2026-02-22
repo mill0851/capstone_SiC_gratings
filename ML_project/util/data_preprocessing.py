@@ -6,6 +6,10 @@ import matplotlib.pyplot as plt
 from scipy.stats import qmc
 from scipy.signal import find_peaks
 from scipy.optimize import curve_fit
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torch.utils.data import DataLoader, random_split
 
 def import_data(root_dir: str) -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame, np.ndarray]:
 
@@ -180,3 +184,14 @@ def extract_features_phase1(refl: pd.DataFrame, window_size: int, threshold: flo
     features = pd.DataFrame(features, index = refl.index, columns=['lambda_res', 'Q'])
     return features
 
+def create_dataloaders(dataset, train_ratio=0.8, batch_size=32):
+    n_total = len(dataset)
+    n_train = int(train_ratio * n_total)
+    n_val = n_total - n_train
+
+    train_set, val_set = random_split(dataset, [n_train, n_val])
+
+    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
+    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
+
+    return train_loader, val_loader
