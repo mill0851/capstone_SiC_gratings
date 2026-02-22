@@ -3,7 +3,7 @@ from models_phase1.MLPModel import*
 from util.eval_plot import*
 
 mlp_model = MLPModel()
-history = train_mlp(mlp_model, train_loader, val_loader, epochs=325)
+history = train_mlp(mlp_model, train_loader, val_loader, epochs=1000, alpha=1.0, lr=8e-3)
 
 # checkpoint = torch.load("mlp_final.pth", map_location="cpu")
 # model.load_state_dict(checkpoint["model_state_dict"])
@@ -13,6 +13,9 @@ history = train_mlp(mlp_model, train_loader, val_loader, epochs=325)
 plot_losses(history)
 plot_lambda_predictions(mlp_model, val_loader, dataset)
 plot_Q_predictions(mlp_model, val_loader)
+plot_confusion_matrix(mlp_model, val_loader)
+compute_r2(mlp_model,val_loader)
+classification_metrics(mlp_model, val_loader)
 
 torch.save({
     "model_state_dict": mlp_model.state_dict(),

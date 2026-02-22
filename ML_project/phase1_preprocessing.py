@@ -2,7 +2,7 @@ from util.data_preprocessing import *
 from util.Phase1Dataset import Phase1Dataset
 
 # ---- Import ----
-DATA_PATH = './data/batch1'
+DATA_PATH = './data/batch2'
 WL_DOMAIN = (11.25,12.5) # um
 UPSAMPLE_RATE = 4
 PEAK_THRESHOLD = 0.2
