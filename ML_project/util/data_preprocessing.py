@@ -9,7 +9,7 @@ from scipy.optimize import curve_fit
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, Subset
 
 def import_data(root_dir: str) -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame, np.ndarray]:
 
@@ -184,14 +184,52 @@ def extract_features_phase1(refl: pd.DataFrame, window_size: int, threshold: flo
     features = pd.DataFrame(features, index = refl.index, columns=['lambda_res', 'Q'])
     return features
 
-def create_dataloaders(dataset, train_ratio=0.8, batch_size=32):
+def create_dataloaders(
+        dataset,
+        split_path,
+        seed=42,
+        train_ratio=0.8,
+        batch_size=32):
     n_total = len(dataset)
     n_train = int(train_ratio * n_total)
     n_val = n_total - n_train
 
-    train_set, val_set = random_split(dataset, [n_train, n_val])
+    # Case 1: Split already exists → load it
+    if os.path.exists(split_path):
+        split = torch.load(split_path)
+        train_indices = split["train_indices"]
+        val_indices = split["val_indices"]
+        print("Loaded existing data split.")
 
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_set, batch_size=batch_size, shuffle=False)
+    # Case 2: Create new split and save it
+    else:
+        generator = torch.Generator().manual_seed(seed)
+        indices = torch.randperm(n_total, generator=generator)
+
+        train_indices = indices[:n_train]
+        val_indices = indices[n_train:]
+
+        torch.save({
+            "train_indices": train_indices,
+            "val_indices": val_indices
+        }, split_path)
+
+        print("Created and saved new data split.")
+
+    # Build subsets + loaders
+    train_set = Subset(dataset, train_indices)
+    val_set = Subset(dataset, val_indices)
+
+    train_loader = DataLoader(
+        train_set,
+        batch_size=batch_size,
+        shuffle=True
+    )
+
+    val_loader = DataLoader(
+        val_set,
+        batch_size=batch_size,
+        shuffle=False
+    )
 
     return train_loader, val_loader

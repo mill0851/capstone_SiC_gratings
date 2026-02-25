@@ -11,34 +11,24 @@ def plot_losses(history: dict):
 
     # Train Classification
     plt.figure()
-    plt.plot(epochs, history["train_cls_loss"])
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Train Classification Loss")
-    plt.show()
-
-    # Val Classification
-    plt.figure()
-    plt.plot(epochs, history["val_cls_loss"])
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Validation Classification Loss")
+    plt.plot(epochs, history["train_cls_loss"], label="training cls loss", color='k')
+    plt.plot(epochs, history["val_cls_loss"], label="validation cls loss", color="cyan")
+    plt.xlabel("Epoch", fontsize=16)
+    plt.ylabel("Loss", fontsize=16)
+    plt.title("Classification Loss", fontsize=18)
+    plt.grid(alpha=0.75)
+    plt.legend(fontsize=16)
     plt.show()
 
     # Train Regression
     plt.figure()
-    plt.plot(epochs, history["train_reg_loss"])
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Train Regression Loss")
-    plt.show()
-
-    # Val Regression
-    plt.figure()
-    plt.plot(epochs, history["val_reg_loss"])
-    plt.xlabel("Epoch")
-    plt.ylabel("Loss")
-    plt.title("Validation Regression Loss")
+    plt.plot(epochs, history["train_reg_loss"], label="training reg loss", color='k')
+    plt.plot(epochs, history["val_reg_loss"], label="validation reg loss", color='cyan')
+    plt.xlabel("Epoch", fontsize=16)
+    plt.ylabel("Loss", fontsize=16)
+    plt.title("Regression Loss", fontsize=18)
+    plt.grid(alpha=0.75)
+    plt.legend(fontsize=16)
     plt.show()
 
 def plot_lambda_predictions(model, data_loader, dataset, device="cpu"):
@@ -75,12 +65,14 @@ def plot_lambda_predictions(model, data_loader, dataset, device="cpu"):
     y_pred = torch.cat(all_pred).numpy()
 
     plt.figure()
-    plt.scatter(y_true, y_pred)
-    plt.xlabel("Target Lambda")
-    plt.ylabel("Predicted Lambda")
-    plt.title("Lambda: Target vs Predicted")
+    plt.scatter(y_true, y_pred, color='k', label="target vs predictions")
+    plt.xlabel("Target Wavelength [um]", fontsize=16)
+    plt.ylabel("Predicted Wavelength [um]", fontsize=16)
+    plt.title("Wavelength: Target vs Predicted", fontsize=18)
     plt.plot([y_true.min(), y_true.max()],
-             [y_true.min(), y_true.max()])
+             [y_true.min(), y_true.max()], color="cyan", label="truth line")
+    plt.grid(alpha=0.75)
+    plt.legend(fontsize=16)
     plt.show()
 
 def plot_Q_predictions(model, data_loader, device="cpu"):
@@ -106,12 +98,14 @@ def plot_Q_predictions(model, data_loader, device="cpu"):
     y_pred = torch.cat(all_pred).numpy()
 
     plt.figure()
-    plt.scatter(y_true, y_pred)
-    plt.xlabel("Target Q")
-    plt.ylabel("Predicted Q")
-    plt.title("Q: Target vs Predicted")
+    plt.scatter(y_true, y_pred, color='k', label="target vs predictions")
+    plt.xlabel("Target Q", fontsize=16)
+    plt.ylabel("Predicted Q", fontsize=16)
+    plt.title("Q: Target vs Predicted", fontsize=18)
     plt.plot([y_true.min(), y_true.max()],
-             [y_true.min(), y_true.max()])
+             [y_true.min(), y_true.max()], color='cyan', label="turth line")
+    plt.grid(alpha=0.75)
+    plt.legend(fontsize=16)
     plt.show()
 
 def plot_confusion_matrix(model, data_loader, device="cpu"):
@@ -137,10 +131,10 @@ def plot_confusion_matrix(model, data_loader, device="cpu"):
     cm = confusion_matrix(y_true, y_pred)
 
     plt.figure()
-    sns.heatmap(cm, annot=True, fmt="d")
-    plt.xlabel("Predicted")
-    plt.ylabel("True")
-    plt.title("Confusion Matrix")
+    sns.heatmap(cm, annot=True, fmt="d", cmap='coolwarm')
+    plt.xlabel("Predicted", fontsize=16)
+    plt.ylabel("True", fontsize=16)
+    plt.title("Confusion Matrix", fontsize=18)
     plt.show()
 
 def compute_r2(model, data_loader, device="cpu"):
