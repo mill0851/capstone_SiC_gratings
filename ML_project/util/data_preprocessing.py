@@ -187,31 +187,36 @@ def extract_features_phase1(refl: pd.DataFrame, window_size: int, threshold: flo
 def create_dataloaders(
         dataset,
         split_path,
-        seed=42,
+        new_split=False,
         train_ratio=0.8,
         batch_size=32):
     n_total = len(dataset)
     n_train = int(train_ratio * n_total)
-    n_val = n_total - n_train
 
-    # Case 1: Split already exists → load it
-    if os.path.exists(split_path):
+    # Case 1: Split already exists, load it
+    if os.path.exists(split_path) and not new_split:
         split = torch.load(split_path)
         train_indices = split["train_indices"]
         val_indices = split["val_indices"]
+        test_indices = split['test_indices']
         print("Loaded existing data split.")
 
     # Case 2: Create new split and save it
     else:
+        seed = np.random.randint(1, 1000)
         generator = torch.Generator().manual_seed(seed)
         indices = torch.randperm(n_total, generator=generator)
 
+        trainIdx = n_train + (len(dataset) - n_train)//2
+
         train_indices = indices[:n_train]
-        val_indices = indices[n_train:]
+        val_indices = indices[n_train:trainIdx]
+        test_indices = indices[trainIdx:]
 
         torch.save({
             "train_indices": train_indices,
-            "val_indices": val_indices
+            "val_indices": val_indices,
+            'test_indices': test_indices
         }, split_path)
 
         print("Created and saved new data split.")
@@ -219,6 +224,7 @@ def create_dataloaders(
     # Build subsets + loaders
     train_set = Subset(dataset, train_indices)
     val_set = Subset(dataset, val_indices)
+    test_set = Subset(dataset, test_indices)
 
     train_loader = DataLoader(
         train_set,
@@ -232,4 +238,10 @@ def create_dataloaders(
         shuffle=False
     )
 
-    return train_loader, val_loader
+    test_loader = DataLoader(
+        test_set,
+        batch_size=batch_size,
+        shuffle=False
+    )
+
+    return train_loader, val_loader, test_loader

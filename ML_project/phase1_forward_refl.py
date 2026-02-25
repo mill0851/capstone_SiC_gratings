@@ -1,4 +1,4 @@
-from util.eval_plot import*
+from util.data_eval import*
 from util.Phase1Dataset import *
 from util.data_preprocessing import *
 from util.MLPModel import *
@@ -52,12 +52,14 @@ EPOCHS = 250
 ALPHA = 4.0
 LR = 1e-3
 WD = 1e-4
-TRAIN = False
-NAME = "refl_mlp_test_1"
+TRAIN = True
+NEW_SPLIT = False
+NAME = "forward_refl_split-75-15-15"
 PATH = f'C:/Users/robert/Code/capstone/capstone_SiC_gratings/ML_project/models_phase1/{NAME}'
-
 os.makedirs(PATH, exist_ok=True)
 
+
+# ---- SETUP ----
 # Load in dataset
 dataset = Phase1Dataset(
     geom_df = geom_values,
@@ -66,19 +68,32 @@ dataset = Phase1Dataset(
     normalize_feat = True
 )
 
-# Load in data loaders, splits are fixed
-train_loader, val_loader = create_dataloaders(
+# Load in data loaders
+train_loader, val_loader, test_loader = create_dataloaders(
     dataset,
     f"{PATH}/data_split.pt",
-    seed=30,
+    new_split=NEW_SPLIT,
     train_ratio=TRAIN_SPLIT,
-    batch_size=BATCH_SIZE)
+    batch_size=BATCH_SIZE
+)
 
-# Train Model
+
+# ---- TRAINING ----
 if TRAIN:
     model = MLPModel(hidden_dim=HIDDEN_DIM)
-    train_mlp(model, train_loader, val_loader, PATH,epochs=EPOCHS,alpha=ALPHA,lr=LR,wd=WD)
+    train_mlp(
+        model,
+        train_loader,
+        val_loader,
+        PATH,
+        epochs=EPOCHS,
+        alpha=ALPHA,
+        lr=LR,
+        wd=WD
+    )
 
+
+# ---- EVALUATION ----
 # Load Final Model
 final_model = MLPModel(hidden_dim=HIDDEN_DIM)
 final_checkpoint = torch.load(f'{PATH}/final_model.pt', map_location="cpu")
@@ -100,16 +115,16 @@ cls_model.load_state_dict(cls_checkpoint["model_state_dict"])
 cls_history = cls_checkpoint["history"]
 cls_model.eval()
 
-# Plot loss per epoch
+# Plot eval and training losses per epoch
 plot_losses(final_history)
 plot_losses(reg_history)
 plot_losses(cls_history)
 
-# Regression Performance
-plot_lambda_predictions(reg_model, val_loader, dataset)
-plot_Q_predictions(reg_model, val_loader)
-compute_r2(reg_model, val_loader)
+# Test regression performance with the test set
+plot_lambda_predictions(reg_model, test_loader, dataset)
+plot_Q_predictions(reg_model, test_loader)
+compute_r2(reg_model, test_loader)
 
-# Classification Performance
-plot_confusion_matrix(cls_model, val_loader)
-classification_metrics(cls_model, val_loader)
+# Test classification performance with the test set
+plot_confusion_matrix(cls_model, test_loader)
+classification_metrics(cls_model, test_loader)
