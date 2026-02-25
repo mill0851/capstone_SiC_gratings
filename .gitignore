@@ -1,5 +1,3 @@
-.venv
-.vscode
-./data
+**/.vscode/
 **/data/
-**/Data/
+
