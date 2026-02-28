@@ -138,7 +138,7 @@ def generate_sample_space(tlw_bounds: List[float],
 
 
 if __name__ == "__main__":
-    root_dir = r"C:\Users\robert\Code\capstone\capstone_SiC_gratings\data\ML\blw_sweep_2"
+    root_dir = r"C:\Users\robert\Code\capstone\capstone_SiC_gratings\ML_project\data\blw_sweep_2"
     data = import_comsol_data(root_dir, "metadata.csv", ["data.csv"], {"wavelength_um":"reflectance_0"})
 
     data_np = data.X_data_np
@@ -157,14 +157,14 @@ if __name__ == "__main__":
         print(f"Data Table: \n {data_np[i]}")
         print(f"Data axis: \n {data_axes[i]}")
 
-    plt.figure(figsize=(10,6))
+    plt.figure(figsize=(8,6))
     for i in range(0, len(data_np[0])):
         plt.plot(data_axes[0]*1e6, data_np[0][i]/np.max(data_np[0][i]), label=f"run {i+1}")
     plt.xlabel("Wavelength (um)", fontsize=18)
     plt.ylabel("Normalized Reflectance (%)", fontsize=18)
     plt.title(f"BLW Sweep [2.5-5.0 (um)]", fontsize=20)
     plt.grid(alpha=0.8)
-    plt.legend(fontsize=18)
+    # plt.legend(fontsize=18)
     plt.show()
 
     # # ---- BOUNDS/SAMPLE SPACE TESTING ----

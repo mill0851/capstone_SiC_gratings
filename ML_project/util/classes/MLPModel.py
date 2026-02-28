@@ -7,7 +7,7 @@ import copy
 
 
 class MLPModel(nn.Module):
-    def __init__(self, hidden_dim=64):
+    def __init__(self, hidden_dim=64, n_layers=3):
         super().__init__()
 
         self.shared = nn.Sequential(
@@ -159,5 +159,3 @@ def train_mlp(
     "model_state_dict": model.state_dict(),
     "history": history
     }, f"{PATH}/final_model.pt")
-    
-

@@ -1,6 +1,5 @@
 import pandas as pd
 import os
-from typing import List
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import qmc
@@ -10,6 +9,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split, Subset
+from .classes.Phase1Dataset import Phase1Dataset
 
 def import_data(root_dir: str) -> tuple[np.ndarray, pd.DataFrame, pd.DataFrame, np.ndarray]:
 
@@ -185,23 +185,32 @@ def extract_features_phase1(refl: pd.DataFrame, window_size: int, threshold: flo
     return features
 
 def create_dataloaders(
-        dataset,
-        split_path,
-        new_split=False,
-        train_ratio=0.8,
-        batch_size=32):
+        dataset: Phase1Dataset,
+        split_path: str,
+        new_split: bool = False,
+        train_ratio: float = 0.8,
+        batch_size: int = 32,
+        indices: dict = None):
+    
     n_total = len(dataset)
     n_train = int(train_ratio * n_total)
+    
+    # Case 1: Indices provided
+    if indices:
+        assert len(indices) == 3, "Must have indices for: train, val, test"
+        train_indices = indices["train_indices"]
+        val_indices = indices["val_indices"]
+        test_indices = indices["test_indices"]
 
-    # Case 1: Split already exists, load it
-    if os.path.exists(split_path) and not new_split:
+    # Case 2: Split already exists, load it
+    elif os.path.exists(split_path) and not new_split:
         split = torch.load(split_path)
         train_indices = split["train_indices"]
         val_indices = split["val_indices"]
         test_indices = split['test_indices']
         print("Loaded existing data split.")
 
-    # Case 2: Create new split and save it
+    # Case 3: Create new split and save it
     else:
         seed = np.random.randint(1, 1000)
         generator = torch.Generator().manual_seed(seed)
@@ -245,3 +254,64 @@ def create_dataloaders(
     )
 
     return train_loader, val_loader, test_loader
+
+def load_dataset(
+        path: str,
+        domain: tuple,
+        upsample_rate: int,
+        peak_threshold: float,
+        window_samples: int,
+        normalize_geom: bool = True,
+        normalize_feat: bool = True,
+        verbose: bool = True
+) -> Phase1Dataset:
+    
+    """
+    This function loads the Phase1Dataset object for this work. This
+    class inhereits the pytorch Dataset class but has some features
+    relevant to the data I will be dealing with.
+
+    Returns:
+        Phas1Dataset: Dataset object for model training and evaluation
+    """
+
+    geom_labels, geom_values, refl, wl, bg = import_data(path)
+    wl = reduce_domain(domain, refl, bg)
+    normalize_spectrum(refl, bg)
+    remove_restrahlen(refl, bg)
+    flip_spectrum(refl)
+    refl = interpolate_linear(refl, upsample_rate)
+    wl = refl.columns.astype(float).to_numpy()
+    features = extract_features_phase1(refl, window_samples, peak_threshold)
+
+    if verbose:
+        print(f'\n geometry labels [names]: \n{geom_labels}')
+        print(f'geometry labels type: {type(geom_labels)} \n')
+        print(f'geometry table [um]: \n{geom_values.head()}')
+        print(f'geometry table type: {type(geom_values)}\n')
+        print(f'data table [% reflectance]: \n{refl.head()}')
+        print(f'data table type: {type(refl)}\n')
+        print(f'background table [% reflectance]: \n{bg.head()}')
+        print(f'background table type: {type(bg)}\n')
+        print(f'wavelength axis [um]: \n{wl[0:50]} \n {np.shape(wl)}')
+        print(f'wavelength axis type: {type(wl)}\n')
+        print(f'feature table:\n{features.head()}')
+        print(f'feature table type: {type(features)}\n')
+
+        for i in range(0,5):
+            plt.plot(wl, refl.iloc[i,:], label = f'curve {i+1}')
+        plt.xlabel('Wavelength [um]', fontsize=18)
+        plt.ylabel('Absorption [a.u.]', fontsize=18)
+        plt.title('Normalized Absorption - Background Removes', fontsize=20)
+        plt.legend(fontsize=16)
+        plt.grid(alpha=0.8)
+        plt.show()
+
+    dataset = Phase1Dataset(
+        geom_df = geom_values,
+        feat_df = features,
+        normalize_geom = normalize_geom,
+        normalize_feat = normalize_feat
+    )
+
+    return dataset
