@@ -79,7 +79,6 @@ class Phase1Dataset(Dataset):
         self.feat = torch.tensor(feat_np, dtype=torch.float32)
         self.has_resonance = torch.tensor(has_res, dtype=torch.float32)       
 
-    # Inherited methods
     def __len__(self):
         return len(self.geom)
 
@@ -89,12 +88,6 @@ class Phase1Dataset(Dataset):
             self.feat[idx],           # (lambda, Q)
             self.has_resonance[idx]   # 0 or 1
         )
-
-    # Denormalization helpers
-    def denormalize_geometry(self, x):
-        if not self.normalize_geom:
-            return x
-        return x * torch.tensor(self.geom_std) + torch.tensor(self.geom_mean)
 
     def denormalize_feature(self, y):
         if not self.normalize_feat:

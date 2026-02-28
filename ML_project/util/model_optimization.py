@@ -33,15 +33,13 @@ def generate_kfold(
     kfold_indices = idx[split:]
 
     # Generate KFOLD iterable
-    kf = KFold(
-        n_splits=n_splits,
-        shuffle=False
-    )
-
-    # Split indices
-    iterable = kf.split(kfold_indices)
+    kf = KFold(n_splits=n_splits, shuffle=False)
+    iterable = []
+    for train_pos, val_pos in kf.split(kfold_indices):
+        train_idx = kfold_indices[train_pos]  # map positions back to original indices
+        val_idx = kfold_indices[val_pos]
+        iterable.append((train_idx, val_idx))
 
     return iterable, test_indices
-
 
 

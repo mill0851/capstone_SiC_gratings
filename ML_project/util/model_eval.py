@@ -4,6 +4,9 @@ import torch
 from sklearn.metrics import confusion_matrix, accuracy_score, precision_score, recall_score
 import seaborn as sns
 from sklearn.metrics import r2_score
+from util.classes.MLPModel import MLPModel
+from util.classes.Phase1Dataset import Phase1Dataset
+from torch.utils.data import DataLoader
 
 
 def plot_losses(history: dict):
@@ -31,81 +34,83 @@ def plot_losses(history: dict):
     plt.legend(fontsize=16)
     plt.show()
 
-def plot_lambda_predictions(model, data_loader, dataset, device="cpu"):
-    model.eval()
-    
+def evaluate_model(
+        model: MLPModel,
+        data_loader: DataLoader,
+        dataset: Phase1Dataset,
+        device: str = "cpu"):
+        
     all_true = []
     all_pred = []
 
+    model.eval()
     with torch.no_grad():
         for geom, feat, mask in data_loader:
+
             geom = geom.to(device)
             feat = feat.to(device)
             mask = mask.to(device)
 
-            reg_pred, cls_logits = model(geom)
+            reg_pred, _ = model(geom)
 
             mask_bool = mask == 1
             if mask_bool.sum() > 0:
+
                 # Select only valid resonances
-                true_feat = feat[mask_bool][:, 0:1]     # lambda
-                pred_feat = reg_pred[mask_bool][:, 0:1] # lambda
+                true_feat = feat[mask_bool]
+                pred_feat = reg_pred[mask_bool]
 
                 # Denormalize
                 true_feat = dataset.denormalize_feature(true_feat)
                 pred_feat = dataset.denormalize_feature(pred_feat)
 
-                true_feat = true_feat[:, 0]
-                pred_feat = pred_feat[:, 0]
-
+                # Add to list
                 all_true.append(true_feat.cpu())
                 all_pred.append(pred_feat.cpu())
 
-    y_true = torch.cat(all_true).numpy()
-    y_pred = torch.cat(all_pred).numpy()
+    target = torch.cat(all_true).numpy()
+    pred = torch.cat(all_pred).numpy()
+
+    return target, pred
+
+def plot_regression(
+        model: MLPModel,
+        data_loader: DataLoader,
+        dataset: Phase1Dataset,
+        device="cpu"):
+    """
+    Plots regression predictions vs actual feature values.
+
+    Args:
+        model (MLPModel): Trained model to evaluate
+        data_loader (DataLoader): data loader to serve batches of
+        the relevant data
+        dataset (Phase1Dataset): dataset class used in this project 
+        device (str, optional): probably gonna always be cpu?. Defaults to "cpu".
+    """
+    
+    target, pred = evaluate_model(model, data_loader, dataset, device=device)
 
     plt.figure()
-    plt.scatter(y_true, y_pred, color='k', label="target vs predictions")
-    plt.xlabel("Target Wavelength [um]", fontsize=16)
-    plt.ylabel("Predicted Wavelength [um]", fontsize=16)
-    plt.title("Wavelength: Target vs Predicted", fontsize=18)
-    plt.plot([y_true.min(), y_true.max()],
-             [y_true.min(), y_true.max()], color="cyan", label="truth line")
-    plt.grid(alpha=0.75)
-    plt.legend(fontsize=16)
+    plt.scatter(target[:,0], pred[:,0], color='k', label="Regression")
+    plt.xlabel("Target Wavelength [um]", fontsize=18)
+    plt.ylabel("Model Prediction [um]", fontsize=18)
+    plt.title("Wavelength Regression", fontsize=20)
+    plt.plot([target[:,0].min(), target[:,0].max()],
+             [target[:,0].min(), target[:,0].max()], color="cyan", label="100% Accuracy")
+    plt.grid(alpha=0.8)
+    plt.legend(fontsize=14)
     plt.show()
 
-def plot_Q_predictions(model, data_loader, device="cpu"):
-    model.eval()
-    
-    all_true = []
-    all_pred = []
-
-    with torch.no_grad():
-        for geom, feat, mask in data_loader:
-            geom = geom.to(device)
-            feat = feat.to(device)
-            mask = mask.to(device)
-
-            reg_pred, cls_logits = model(geom)
-
-            mask_bool = mask == 1
-            if mask_bool.sum() > 0:
-                all_true.append(feat[mask_bool][:, 1].cpu())
-                all_pred.append(reg_pred[mask_bool][:, 1].cpu())
-
-    y_true = torch.cat(all_true).numpy()
-    y_pred = torch.cat(all_pred).numpy()
-
     plt.figure()
-    plt.scatter(y_true, y_pred, color='k', label="target vs predictions")
-    plt.xlabel("Target Q", fontsize=16)
-    plt.ylabel("Predicted Q", fontsize=16)
-    plt.title("Q: Target vs Predicted", fontsize=18)
-    plt.plot([y_true.min(), y_true.max()],
-             [y_true.min(), y_true.max()], color='cyan', label="turth line")
-    plt.grid(alpha=0.75)
-    plt.legend(fontsize=16)
+    plt.scatter(target[:,1], pred[:,1], color='k', label="Regression")
+    plt.xlabel("Target Q [unitless]", fontsize=18)
+    plt.ylabel("Model Prediction [unitless]", fontsize=18)
+    plt.title("Q Regression", fontsize=20)
+    plt.plot([target[:,1].min(), target[:,1].max()],
+             [target[:,1].min(), target[:,1].max()], color="cyan", label="100% Accuracy")
+    plt.grid(alpha=0.8)
+    plt.legend(fontsize=14)
     plt.show()
 
 def plot_confusion_matrix(model, data_loader, device="cpu"):
@@ -189,3 +194,33 @@ def classification_metrics(model, data_loader, device="cpu"):
     print("Precision:", precision_score(y_true, y_pred))
     print("Recall:", recall_score(y_true, y_pred))
 
+def compute_rmse(
+        model: MLPModel,
+        data_loader: DataLoader,
+        dataset: Phase1Dataset,
+        device: str = 'cpu'):
+    """
+    Computes the RMSE value for the regression head in Non-normalized units. i.e. the
+    return values are in physical units (nm, Q is scaled properly)
+
+    parameters:
+        model: This is an MLPModel object which you have trained to desire
+        val_loader: data loader with validation (or whatever) data
+        device: device for computation (typically cpu, you would know otherwise)
+    """
+    target, pred = evaluate_model(model, data_loader, dataset, device=device)
+
+    wl_target = target[:,0]
+    wl_pred = pred[:,0]
+
+    Q_target = target[:,1]
+    Q_pred = pred[:,1]
+
+    wl_rmse = np.sqrt(np.mean((wl_pred - wl_target)**2))
+    Q_rmse = np.sqrt(np.mean((Q_pred - Q_target)**2))
+
+    return {"wl_rmse": wl_rmse, "Q_rmse": Q_rmse}
+
+
+
+            

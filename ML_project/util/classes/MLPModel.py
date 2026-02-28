@@ -10,14 +10,18 @@ class MLPModel(nn.Module):
     def __init__(self, hidden_dim=64, n_layers=3):
         super().__init__()
 
-        self.shared = nn.Sequential(
-            nn.Linear(4, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU()
-        )
+        layers = []
+
+        # input layer
+        layers.append(nn.Linear(4, hidden_dim))
+        layers.append(nn.ReLU())
+
+        # hidden layers
+        for _ in range(n_layers - 1):
+            layers.append(nn.Linear(hidden_dim, hidden_dim))
+            layers.append(nn.ReLU())
+
+        self.shared = nn.Sequential(*layers)
 
         self.regression_head = nn.Linear(hidden_dim, 2)
         self.classification_head = nn.Linear(hidden_dim, 1)
@@ -36,7 +40,8 @@ def train_mlp(
         epochs=150,
         lr=1e-3,
         alpha=1.0,
-        wd=1e-4):
+        wd=1e-4,
+        save=True):
     
     # Config for training loop
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
@@ -133,29 +138,34 @@ def train_mlp(
         # Update best loss states
         if val_cls_loss < best_cls_loss:
             best_cls_loss = val_cls_loss
-            best_cls_state = copy.deepcopy(model.state_dict())
-            torch.save({
-                "model_state_dict": best_cls_state,
-                "history": history
-            }, f"{PATH}/best_cls.pt")
+            best_cls_state = copy.deepcopy(model)
+            if save:
+                torch.save({
+                    "model_state_dict": best_cls_state.state_dict(),
+                    "history": history
+                }, f"{PATH}/best_cls.pt")
 
         if val_reg_loss < best_reg_loss:
             best_reg_loss = val_reg_loss
-            best_reg_state = copy.deepcopy(model.state_dict())
-            torch.save({
-                "model_state_dict": best_reg_state,
-                "history": history
-            }, f"{PATH}/best_reg.pt")
+            best_reg_state = copy.deepcopy(model)
+            if save:
+                torch.save({
+                    "model_state_dict": best_reg_state.state_dict(),
+                    "history": history
+                }, f"{PATH}/best_reg.pt")
 
         # Print out current epoch + losses
-        print(f"Epoch {epoch+1:03d} | "
-              f"Train CLS: {history['train_cls_loss'][-1]:.4f} | "
-              f"Train REG: {history['train_reg_loss'][-1]:.4f} | "
-              f"Val CLS: {history['val_cls_loss'][-1]:.4f} | "
-              f"Val REG: {history['val_reg_loss'][-1]:.4f}")
+        # print(f"Epoch {epoch+1:03d} | "
+        #       f"Train CLS: {history['train_cls_loss'][-1]:.4f} | "
+        #       f"Train REG: {history['train_reg_loss'][-1]:.4f} | "
+        #       f"Val CLS: {history['val_cls_loss'][-1]:.4f} | "
+        #       f"Val REG: {history['val_reg_loss'][-1]:.4f}")
     
     # Save final model
-    torch.save({
-    "model_state_dict": model.state_dict(),
-    "history": history
-    }, f"{PATH}/final_model.pt")
+    if save:
+        torch.save({
+            "model_state_dict": model.state_dict(),
+            "history": history
+        }, f"{PATH}/final_model.pt")
+    
+    return best_reg_state, best_cls_state

@@ -81,8 +81,7 @@ plot_losses(reg_history)
 plot_losses(cls_history)
 
 # Test regression performance with the test set
-plot_lambda_predictions(reg_model, test_loader, dataset)
-plot_Q_predictions(reg_model, test_loader)
+plot_regression(reg_model, test_loader, dataset)
 compute_r2(reg_model, test_loader)
 
 # Test classification performance with the test set
