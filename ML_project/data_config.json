@@ -1,0 +1,10 @@
+{
+    "path": "./data/ML_proj_refl_data",
+    "wl_domain": [
+        11.25,
+        12.5
+    ],
+    "upsample_rate": 4,
+    "threshold": 0.2,
+    "window": 20
+}
