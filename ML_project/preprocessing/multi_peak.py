@@ -1,0 +1,82 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+from ML_project.util.data_preprocessing import *
+
+
+
+#### DATA PREPROCESSING PIPELINE - MULTI PEAK ####
+# Config
+pd.set_option('display.max_columns', 5)
+DATA_PATH = './ML_project/data/test_data'
+DOMAIN = (10.0, 12.0)
+TEST_IDX = 1
+INTERP = 4
+WINDOW = 20
+THRESHOLD = 0.2
+N_PEAKS = 4
+
+# Import Data
+geom_labels, geom_table, refl_data, abs_data, refl_bg, abs_bg, wl = import_data(DATA_PATH)
+print(f'\ngeometry labels:\n{geom_labels}\n')
+print(f'geometry_table:\n{geom_table.head()}\n')
+print(f'reflection data:\n{refl_data.head()}\n')
+print(f'reflection background:\n{refl_bg.head()}\n')
+print(f'absorption data:\n{abs_data.head()}\n')
+print(f'absorption background:\n{abs_bg.head()}\n')
+refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+
+# Normalize Spectrum
+normalize(refl_bg)
+normalize(abs_bg)
+normalize(refl_data)
+normalize(abs_data)
+refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+
+# Remove Background signal
+remove_background(refl_data, refl_bg)
+remove_background(abs_data, abs_bg)
+refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+
+# Reduce Domain
+reduce_domain(DOMAIN, refl_data)
+reduce_domain(DOMAIN, abs_data)
+refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+
+# Flip reflectance data for feature extraction
+refl_data *= -1.0
+print(f'Pre Interpolation Length: {len(refl_data.iloc[0])}\n')
+
+# Interpolate (Linear)
+refl_data = interp_linear(refl_data, INTERP)
+abs_data = interp_linear(abs_data, INTERP)
+wl = refl_data.columns.to_numpy(dtype=float)
+print(f'Post Interpolation Length: {len(refl_data.iloc[0])}\n')
+refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+
+# Extract Feature Table
+abs_ft_multi = multi_peak_extraction(
+    abs_data,
+    WINDOW,
+    THRESHOLD,
+    N_PEAKS
+)
+refl_ft_multi = multi_peak_extraction(
+    refl_data,
+    WINDOW,
+    THRESHOLD,
+    N_PEAKS
+)
+print(f'Feature table (abs):\n{abs_ft_multi}\n')
+print(f'Feature table (refl):\n{refl_ft_multi}\n')
+
+# Create export dict
+mutli_peak_ft = {
+    "wl": wl,
+    "reflection": refl_data,
+    "absorption": abs_data,
+    "reflection_features": refl_ft_multi,
+    "absorption_features": abs_ft_multi
+}
+
+
+

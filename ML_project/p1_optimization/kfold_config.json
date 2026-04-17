@@ -1,6 +1,0 @@
-{
-    "n_splits": 5,
-    "shuffle": true,
-    "seed": 42,
-    "test_ratio": 0.15
-}

@@ -1,0 +1,10 @@
+{
+    "data_path": "./data/test_data",
+    "domain": [
+        10.0,
+        12.5
+    ],
+    "interpolation_density": 4,
+    "window_size": 20,
+    "threshold": 0.2
+}
