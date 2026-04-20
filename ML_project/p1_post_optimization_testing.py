@@ -1,7 +1,7 @@
 from util.model_eval import*
 from util.classes.Phase1Dataset import *
 from util.data_preprocessing import *
-from util.classes.MLPModel import *
+from ML_project.util.classes.RegMLP import *
 from util.model_optimization import *
 import itertools
 import json

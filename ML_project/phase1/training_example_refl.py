@@ -1,7 +1,6 @@
-from util.model_eval import*
 from util.classes.Phase1Dataset import *
-from util.data_preprocessing import *
-from util.classes.MLPModel import *
+from util.classes.RegMLP import *
+from util.classes.ClsMLP import *
 from preprocessing.max_peak import max_Q_ft, data_config
 import json
 import os
@@ -12,7 +11,7 @@ import os
 # be thrown, this is to prevent overriding ones trained models.
 # If you want to reuse the name just delete the directory
 ROOT = "trained_models/phase1"
-NAME = "test_run"
+NAME = "refl_test_1"
 DIR = f'{ROOT}/{NAME}'
 os.makedirs(f'{DIR}', exist_ok=False)
 os.makedirs(f'{DIR}/config', exist_ok=True)
@@ -39,9 +38,9 @@ MLP_config = {
 
 train_config = {
     "epochs": 250,
-    "alpha": 4.0,
     "lr": 1e-3,
     "wd": 1e-4,
+    "patience": 30,
     "path": f'{DIR}/models'
 }
 
@@ -65,21 +64,7 @@ dataset_refl = Phase1Dataset(
     max_Q_ft["reflection_features"]
 )
 
-dataset_abs = Phase1Dataset(
-    max_Q_ft["geometry_table"],
-    max_Q_ft["absorption_features"]
-)
-
 #### CREATE DATA LOADERS ####
-train_loader_abs, val_loader_abs, test_loader_abs = create_dataloaders(
-    dataset_abs,
-    loader_config["seed"],
-    loader_config['train_ratio'],
-    loader_config['val_ratio'],
-    loader_config['test_ratio'],
-    loader_config['batch_size']
-)
-
 train_loader_refl, val_loader_refl, test_loader_refl = create_dataloaders(
     dataset_refl,
     loader_config["seed"],
@@ -90,17 +75,36 @@ train_loader_refl, val_loader_refl, test_loader_refl = create_dataloaders(
 )
 
 #### CREATE MLP ####
-model = MLPModel(
+model_refl_reg = RegMLP(
     MLP_config['hidden_dim'],
     MLP_config['n_layers']
 )
 
-#### TRAIN MODEL ####
+model_refl_cls = ClsMLP(
+    MLP_config['hidden_dim'],
+    MLP_config['n_layers']
+)
 
+#### TRAIN MODELS ####
+reg_refl, reg_refl_hist = train_regression(
+    model_refl_reg,
+    train_loader_refl,
+    val_loader_refl,
+    train_config['epochs'],
+    train_config['lr'],
+    train_config['wd'],
+    train_config['patience'],
+    train_config['path']
+)
 
-
-
-
-
-
+cls_refl, cls_refl_hist = train_classification(
+    model_refl_cls,
+    train_loader_refl,
+    val_loader_refl,
+    train_config['epochs'],
+    train_config['lr'],
+    train_config['wd'],
+    train_config['patience'],
+    train_config['path']
+)
 
