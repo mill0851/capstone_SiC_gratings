@@ -4,10 +4,9 @@ from sklearn.model_selection import KFold
 
 def generate_kfold(
         dataset, 
-        n_splits: int = 5,
-        shuffle: bool = True,
-        random_state: int = 42,
-        test_ratio: float = 0.15
+        n_splits: int,
+        seed: int,
+        test_ratio: float
         ):
     
     """
@@ -21,11 +20,8 @@ def generate_kfold(
     # Get dataset indices
     N = len(dataset)
     idx = np.arange(N)
-
-    # Shuffle before KFOLD
-    if shuffle:
-        rng = np.random.RandomState(random_state)
-        rng.shuffle(idx)
+    rng = np.random.RandomState(seed)
+    rng.shuffle(idx)
 
     # Set aside indices for testing
     split = int(test_ratio * len(idx))

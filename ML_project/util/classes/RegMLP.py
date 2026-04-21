@@ -7,7 +7,7 @@ from util.classes.Phase1Dataset import Phase1Dataset
 
 
 class RegMLP(nn.Module):
-    def __init__(self, hidden_dim, n_layers):
+    def __init__(self, hidden_dim, n_layers, p):
         super().__init__()
 
         layers = []
@@ -15,11 +15,13 @@ class RegMLP(nn.Module):
         # input layer
         layers.append(nn.Linear(4, hidden_dim))
         layers.append(nn.ReLU())
+        layers.append(nn.Dropout(p))
 
         # hidden layers
         for _ in range(n_layers - 1):
             layers.append(nn.Linear(hidden_dim, hidden_dim))
             layers.append(nn.ReLU())
+            layers.append(nn.Dropout(p))
 
         self.shared = nn.Sequential(*layers)
         self.regression_head = nn.Linear(hidden_dim, 2)
@@ -40,7 +42,10 @@ def train_regression(
         path: str):
 
     # Config for training loop
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=wd)
+    optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=10
+    )
     mse = nn.MSELoss()
 
     # History dict for loss graphs
@@ -132,6 +137,8 @@ def train_regression(
             if patience_counter >= patience:
                 print(f"Early stopping triggered at epoch {epoch+1}")
                 break
+
+        scheduler.step(val_reg_loss)
     
     checkpoint = torch.load(f"{path}/best_reg.pt", weights_only=False)
     model.load_state_dict(checkpoint["model_state_dict"])

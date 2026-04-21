@@ -24,6 +24,20 @@ def plot_losses(history: dict, title: str):
     plt.legend(fontsize=16)
     plt.show()
 
+def plot_losses_recon(history: dict, title: str):
+    epochs = np.arange(1, history["stop_epoch"] + 2)
+
+    # Train Classification
+    plt.figure()
+    plt.plot(epochs, history["train_loss_recon"], label="training loss", color='k')
+    plt.plot(epochs, history["val_loss_recon"], label="validation loss", color="cyan")
+    plt.xlabel("Epoch", fontsize=16)
+    plt.ylabel("Loss", fontsize=16)
+    plt.title(title, fontsize=18)
+    plt.grid(alpha=0.75)
+    plt.legend(fontsize=16)
+    plt.show()
+
 # def evaluate_model(
 #         model: MLPModel,
 #         data_loader: DataLoader,

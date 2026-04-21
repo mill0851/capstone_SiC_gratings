@@ -1,17 +1,16 @@
 import pandas as pd
 import matplotlib.pyplot as plt
-from ML_project.util.data_preprocessing import *
-
+from util.data_preprocessing import *
 
 
 #### DATA PREPROCESSING PIPELINE - MULTI PEAK ####
 # Config
-pd.set_option('display.max_columns', 5)
-DATA_PATH = './ML_project/data/test_data'
-DOMAIN = (10.0, 12.0)
-TEST_IDX = 1
+pd.set_option('display.max_columns', 10)
+DATA_PATH = './data/batch2'
+DOMAIN = (10.25, 11.0)
+TEST_IDX = np.arange(0, 1024, 10)
 INTERP = 4
-WINDOW = 20
+WINDOW = 10
 THRESHOLD = 0.2
 N_PEAKS = 4
 
@@ -23,24 +22,25 @@ print(f'reflection data:\n{refl_data.head()}\n')
 print(f'reflection background:\n{refl_bg.head()}\n')
 print(f'absorption data:\n{abs_data.head()}\n')
 print(f'absorption background:\n{abs_bg.head()}\n')
-refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+# for idx in TEST_IDX:
+#     refl_vs_abs_plt(refl_data, abs_data, int(idx))
 
 # Normalize Spectrum
 normalize(refl_bg)
 normalize(abs_bg)
 normalize(refl_data)
 normalize(abs_data)
-refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+# refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
 
 # Remove Background signal
 remove_background(refl_data, refl_bg)
 remove_background(abs_data, abs_bg)
-refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+# refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
 
 # Reduce Domain
 reduce_domain(DOMAIN, refl_data)
 reduce_domain(DOMAIN, abs_data)
-refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+# refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
 
 # Flip reflectance data for feature extraction
 refl_data *= -1.0
@@ -51,20 +51,22 @@ refl_data = interp_linear(refl_data, INTERP)
 abs_data = interp_linear(abs_data, INTERP)
 wl = refl_data.columns.to_numpy(dtype=float)
 print(f'Post Interpolation Length: {len(refl_data.iloc[0])}\n')
-refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+# refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
 
 # Extract Feature Table
 abs_ft_multi = multi_peak_extraction(
     abs_data,
     WINDOW,
     THRESHOLD,
-    N_PEAKS
+    N_PEAKS,
+    TEST_IDX
 )
 refl_ft_multi = multi_peak_extraction(
     refl_data,
     WINDOW,
     THRESHOLD,
-    N_PEAKS
+    N_PEAKS,
+    TEST_IDX
 )
 print(f'Feature table (abs):\n{abs_ft_multi}\n')
 print(f'Feature table (refl):\n{refl_ft_multi}\n')
@@ -75,7 +77,10 @@ mutli_peak_ft = {
     "reflection": refl_data,
     "absorption": abs_data,
     "reflection_features": refl_ft_multi,
-    "absorption_features": abs_ft_multi
+    "absorption_features": abs_ft_multi,
+    "geometry_labels": geom_labels,
+    "geometry_table": geom_table,
+    "peak_count": N_PEAKS
 }
 
 

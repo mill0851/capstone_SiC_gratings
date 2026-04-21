@@ -58,13 +58,13 @@ abs_ft_single = highest_Q(
     abs_data,
     WINDOW,
     THRESHOLD,
-    TEST_IDX
+    None
 )
 refl_ft_single = highest_Q(
     refl_data,
     WINDOW,
     THRESHOLD,
-    TEST_IDX
+    None
 )
 
 print(f'Feature table (abs):\n{abs_ft_single}\n')

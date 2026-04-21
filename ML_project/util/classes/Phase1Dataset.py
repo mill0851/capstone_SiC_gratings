@@ -45,7 +45,7 @@ class Phase1Dataset(Dataset):
         has_res = (feat_np[:,1] > 0).astype(np.float32)
 
         # Normalization stats
-        self.normalize_goem = normalize_geom
+        self.normalize_geom = normalize_geom
         self.normalize_feat = normalize_feat
 
         # Normalize geometry

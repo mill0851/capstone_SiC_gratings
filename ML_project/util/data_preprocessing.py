@@ -171,7 +171,7 @@ def interp_linear(
     wl_new = np.linspace(wl_old[0], wl_old[-1], (num_orig)*(n_samples+1)+1)
 
     interp_data = np.array([
-        np.interp(wl_new, wl_old, row.values)
+        np.interp(wl_new, wl_old, np.asarray(row.values,dtype=float))
         for _, row in data.iterrows()
     ])
 
@@ -274,7 +274,8 @@ def multi_peak_extraction(
         df: pd.DataFrame,
         window: int,
         threshold: float,
-        N: int) -> pd.DataFrame:
+        N: int,
+        test_idx: np.ndarray | None = None) -> pd.DataFrame:
     """
     This function takes in a pivoted data table and does lorentzian fits on all peaks within the data.
     The Q factor for each peak is calculated and then the first N peaks (lower wl to higher wl) are kept.
@@ -287,21 +288,34 @@ def multi_peak_extraction(
         window (int): how main points to fit on either side of the peak
         threshold (float): the amplitude above which a peak must reach to be considered
         N (int): the number of peaks to consider
+        test_idx (np.ndarray, optional): sample indices to plot with their Lorentzian fits
 
     Returns:
         pd.DataFrame: datafram with columns as described above. One row for each curve.
     """
-    
+
     wl = df.columns.to_numpy(dtype=float)
     data = df.to_numpy()
     rows = []
 
     for sampleIdx, row in enumerate(data):
         peaks, _ = find_peaks(row, height=threshold)
+        fit_curves = []
+        fit_wl_arr = []
 
         if len(peaks) == 0:
             for i in range(N):
                 rows.append({"sample_id": sampleIdx, "rank": i, "lambda": 0.0, "Q": 0.0, "mask": 0})
+
+            if test_idx is not None and sampleIdx in test_idx:
+                plt.figure(figsize=(10, 6))
+                plt.plot(wl, row, label="Data", color='k')
+                plt.xlabel("Wavelength (um)", fontsize=16)
+                plt.ylabel("a.u. Absorption/Reflection Proxy", fontsize=16)
+                plt.title(f"Curve {sampleIdx} (no peaks found)", fontsize=18)
+                plt.grid(alpha=0.8)
+                plt.legend(fontsize=16)
+                plt.show()
             continue
 
         pIdx = 0
@@ -340,6 +354,9 @@ def multi_peak_extraction(
 
                 rows.append({"sample_id": sampleIdx, "rank": pIdx, "lambda": wl_res, "Q": Q, "mask": 1})
 
+                fit_curves.append(lorentzian(fit_wl, *popt))
+                fit_wl_arr.append(fit_wl)
+
             except RuntimeError:               # curve_fit failed to converge
                 rows.append({"sample_id": sampleIdx, "rank": pIdx, "lambda": 0.0, "Q": 0.0, "mask": 0})
 
@@ -349,10 +366,122 @@ def multi_peak_extraction(
             rows.append({"sample_id": sampleIdx, "rank": pIdx, "lambda": 0.0, "Q": 0.0, "mask": 0})
             pIdx += 1
 
+        if test_idx is not None and sampleIdx in test_idx:
+            plt.figure(figsize=(10, 6))
+            plt.plot(wl, row, label="Data", color='k')
+            for fitIdx, fit_curve in enumerate(fit_curves):
+                plt.plot(fit_wl_arr[fitIdx],
+                         fit_curve,
+                         label=f'Lorentzian fit {fitIdx}')
+            plt.xlabel("Wavelength (um)", fontsize=16)
+            plt.ylabel("a.u. Absorption/Reflection Proxy", fontsize=16)
+            plt.title(f"Curve {sampleIdx} With Fits", fontsize=18)
+            plt.grid(alpha=0.8)
+            plt.legend(fontsize=16)
+            plt.show()
+
     features = pd.DataFrame(rows)
     features_pivoted = features.pivot(index='sample_id', columns='rank', values=['lambda','Q','mask'])
     features_pivoted.columns = [f'{val}_{k}' for val, k in features_pivoted.columns]
     features_pivoted.index = df.index
 
     return features_pivoted
-            
+
+def extract_pca(
+        df: pd.DataFrame,
+        K: int,
+        artifacts: dict | None = None,
+        test_idx: np.ndarray | None = None) -> tuple[pd.DataFrame, dict]:
+    """
+    Extract PCA coefficients from a pivoted spectrum table. The feature per sample
+    is a K-dimensional vector of principal-component scores. Unlike peak extraction,
+    reconstruction requires the mean and components, so the fitted artifacts are
+    returned alongside the feature table.
+
+    If `artifacts` is None, PCA is fit on `df` (fit + transform). If `artifacts` is
+    provided (mean, components), `df` is only projected onto those components. This
+    supports a train-fit / val-transform split when needed.
+
+    Args:
+        df (pd.DataFrame): pivoted data table (rows=samples, cols=wavelengths)
+        K (int): number of principal components to keep
+        artifacts (dict, optional): prior fit output to reuse (keys: 'mean',
+            'components_full'). If None, a fresh PCA is fit on df.
+        test_idx (np.ndarray, optional): sample indices to plot with their
+            K-component reconstruction overlaid on truth.
+
+    Returns:
+        tuple[pd.DataFrame, dict]:
+            - features: (N, K) DataFrame, columns 'pc_0'...'pc_{K-1}'
+            - artifacts: dict with keys 'mean', 'components' (top-K),
+              'components_full', 'singular_values', 'explained_variance',
+              'explained_variance_ratio', 'wl', 'K'
+    """
+    wl = df.columns.to_numpy(dtype=float)
+    X = df.to_numpy()
+
+    if artifacts is None:
+        mean = X.mean(axis=0)
+        Xc = X - mean
+        _, S, Vt = np.linalg.svd(Xc, full_matrices=False)
+        components_full = Vt
+        singular_values = S
+        ev = (S ** 2) / max(X.shape[0] - 1, 1)
+        ev_ratio = ev / ev.sum()
+    else:
+        mean = artifacts['mean']
+        components_full = artifacts['components_full']
+        singular_values = artifacts.get('singular_values')
+        ev = artifacts.get('explained_variance')
+        ev_ratio = artifacts.get('explained_variance_ratio')
+        Xc = X - mean
+
+    components = components_full[:K]
+    coeffs = Xc @ components.T
+
+    features = pd.DataFrame(
+        coeffs,
+        index=df.index,
+        columns=[f'pc_{i}' for i in range(K)]
+    )
+
+    new_artifacts = {
+        'mean': mean,
+        'components': components,
+        'components_full': components_full,
+        'singular_values': singular_values,
+        'explained_variance': ev,
+        'explained_variance_ratio': ev_ratio,
+        'wl': wl,
+        'K': K,
+    }
+
+    if test_idx is not None:
+        for i in test_idx:
+            if i >= len(X):
+                continue
+            recon = mean + coeffs[i] @ components
+            plt.figure(figsize=(10, 6))
+            plt.plot(wl, X[i], label='Data', color='k')
+            plt.plot(wl, recon, label=f'PCA reconstruction (K={K})',
+                     color='r', linestyle='--')
+            plt.xlabel("Wavelength (um)", fontsize=16)
+            plt.ylabel("a.u. Absorption/Reflection Proxy", fontsize=16)
+            plt.title(f"Curve {i} PCA Reconstruction", fontsize=18)
+            plt.grid(alpha=0.8)
+            plt.legend(fontsize=16)
+            plt.show()
+
+    return features, new_artifacts
+
+def pca_reconstruct(
+        coeffs: np.ndarray,
+        artifacts: dict) -> np.ndarray:
+    """
+    Reconstruct spectra from PCA coefficients using the fitted artifacts.
+    Accepts a (K,) or (N, K) coefficient array; returns (L,) or (N, L).
+    """
+    mean = artifacts['mean']
+    components = artifacts['components']
+    coeffs = np.asarray(coeffs)
+    return mean + coeffs @ components

@@ -32,15 +32,16 @@ loader_config = {
 }
 
 MLP_config = {
-    "hidden_dim": 16,
-    "n_layers": 2
+    "hidden_dim": 128,
+    "n_layers": 4,
+    "p": 0.15
 }
 
 train_config = {
     "epochs": 500,
-    "lr": 1e-3,
-    "wd": 1e-4,
-    "patience": 30,
+    "lr": 5e-3,
+    "wd": 3e-4,
+    "patience": 100,
     "path": f'{DIR}/models'
 }
 
@@ -77,7 +78,8 @@ train_loader_abs, val_loader_abs, test_loader_abs = create_dataloaders(
 #### CREATE MLP ####
 model_abs_reg = RegMLP(
     MLP_config['hidden_dim'],
-    MLP_config['n_layers']
+    MLP_config['n_layers'],
+    MLP_config["p"]
 )
 
 model_abs_cls = ClsMLP(

@@ -16,7 +16,8 @@ checkpoint_cls = torch.load(f'{model_path}/models/best_cls.pt')
 
 reg_model = RegMLP(
     model_config['hidden_dim'],
-    model_config['n_layers']
+    model_config['n_layers'],
+    model_config['p']
 )
 
 cls_model = ClsMLP(

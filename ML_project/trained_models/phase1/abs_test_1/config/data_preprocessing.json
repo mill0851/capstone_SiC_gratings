@@ -5,6 +5,6 @@
         11.0
     ],
     "interpolation_density": 4,
-    "window_size": 20,
+    "window_size": 10,
     "threshold": 0.2
 }
