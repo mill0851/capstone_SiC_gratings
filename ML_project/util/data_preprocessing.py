@@ -518,3 +518,5 @@ def normalize_geom(
     geom_std = geom_np.std(axis=0)
     geom_np = (geom_np - geom_mean) / geom_std
     return geom_np
+
+
