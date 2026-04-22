@@ -17,6 +17,10 @@ K = 26
 # Import Data
 geom_labels, geom_table, refl_data, abs_data, refl_bg, abs_bg, wl = import_data(DATA_PATH)
 
+# Augment geometry table from 4D -> 8D
+geom_table_8d = derive_geometry_features(geom_table)
+geom_labels_8d = geom_table_8d.columns.to_numpy()
+
 # Build and fit preprocessing pipelines
 abs_pipe  = build_pca_pipeline(K, DOMAIN, INTERP, background=abs_bg)
 abs_ft_pca  = abs_pipe.fit_transform(abs_data)
@@ -40,8 +44,8 @@ pca_ft = {
     "absorption": abs_data,
     "absorption_features": abs_ft_pca,
     "absorption_pca": abs_pca,
-    "geometry_labels": geom_labels,
-    "geometry_table": geom_table,
+    "geometry_labels": geom_labels_8d,
+    "geometry_table": geom_table_8d,
     "K": K,
 }
 

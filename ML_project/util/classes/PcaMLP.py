@@ -136,12 +136,12 @@ def train_pca_regression(
         history["train_loss_recon"].append(train_recon_loss)
         history["val_loss_recon"].append(val_recon_loss)
 
-        # print(f"Epoch {epoch+1:03d} | K={model.K:3d} | "
-        #       f"Train REG: {train_reg_loss:.6f} | "
-        #       f"Val REG: {val_reg_loss:.6f} | "
-        #       f"Train RECON: {train_recon_loss:.3e} | "
-        #       f"Val RECON: {val_recon_loss:.3e} | "
-        #       f"Patience: {patience_counter}/{patience}")
+        print(f"Epoch {epoch+1:03d} | K={model.K:3d} | "
+              f"Train REG: {train_reg_loss:.6f} | "
+              f"Val REG: {val_reg_loss:.6f} | "
+              f"Train RECON: {train_recon_loss:.3e} | "
+              f"Val RECON: {val_recon_loss:.3e} | "
+              f"Patience: {patience_counter}/{patience}")
 
         if val_reg_loss < best_reg_loss:
             best_reg_loss = val_reg_loss

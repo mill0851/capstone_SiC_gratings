@@ -1,7 +1,0 @@
-{
-    "epochs": 500,
-    "lr": 0.005,
-    "wd": 0.0003,
-    "patience": 100,
-    "path": "trained_models/phase1/abs_test_1/models"
-}
