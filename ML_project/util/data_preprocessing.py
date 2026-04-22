@@ -183,6 +183,94 @@ def lorentzian(
     """Lorentzian with HWHM = gamma (no offset)"""
     return  (A / ((x - x0)**2 + gamma**2))
 
+def max_A(
+        df: pd.DataFrame,
+        window: int,
+        threshold: float,
+        test_idx: np.ndarray | None = None) -> pd.DataFrame:
+    """
+    Here lorentzian fits are calculated for all peaks above
+    a specific threshold and the highest Q resonance is extracted
+    as the feature for that curve. The data stored is (lambda, Q)
+    if no peak above the threshold is found both entries are 0
+    """
+    wl = df.columns.to_numpy(dtype=float)
+    data = df.to_numpy()
+    features = np.zeros((len(df), 3))
+
+    for rowIdx, row in enumerate(data):
+        fit_curves = []
+        fit_wl_arr = []
+        peaks, _ = find_peaks(row, height=threshold)
+        best_res_gamma_amp = [0,0,0]
+
+        if len(peaks) == 0:
+            features[rowIdx,:] = best_res_gamma_amp
+            continue
+
+        for pIdx, p in enumerate(peaks):
+            left_idx = max(0, p - window)
+            right_idx = min(len(row), p + window)
+
+            fit_region = row[left_idx:right_idx]
+            fit_wl = wl[left_idx:right_idx]
+            fit_wl_arr.append(fit_wl)
+
+            A0 = row[p]
+            wl0 = wl[p]
+            gamma0 = (fit_wl[-1] - fit_wl[0]) / 10
+            p0 = [A0, wl0, gamma0]
+
+            try:
+                popt, pvoc = curve_fit(
+                    lorentzian,
+                    fit_wl,
+                    fit_region,
+                    p0=p0,
+                    bounds=(
+                        [0, fit_wl[0], 0],
+                        [np.inf, fit_wl[-1], np.inf]
+                    ),
+                    maxfev=10000
+                )
+            except RuntimeError:
+                plt.plot(wl, row, 'o-')
+                plt.title("Failed fit")
+                plt.show()
+                continue
+
+            A = popt[0]
+            wl_res = popt[1]
+            gamma = popt[2]
+            Q = wl_res / (2*gamma)
+
+            fit_curve = lorentzian(fit_wl, *popt)
+            fit_curves.append(fit_curve)
+
+            if A > best_res_gamma_amp[2]:
+                best_res_gamma_amp[0] = wl_res
+                best_res_gamma_amp[1] = gamma
+                best_res_gamma_amp[2] = A
+
+        if test_idx is not None and rowIdx in test_idx:
+            plt.figure(figsize=(10,6))
+            plt.plot(wl, row, label="Data", color='k')
+            for fitIdx, _ in enumerate(fit_curves):
+                plt.plot(fit_wl_arr[fitIdx],
+                         fit_curves[fitIdx],
+                         label=f'Lorentzian fit {fitIdx}')
+            plt.xlabel("Wavelength (um)", fontsize=16)
+            plt.ylabel("a.u. Absorption/Reflection Proxy", fontsize=16)
+            plt.title(f"Cruve {rowIdx} With Fits", fontsize=18)
+            plt.grid(alpha=0.8)
+            plt.legend(fontsize=16)
+            plt.show()
+
+        features[rowIdx,:] = best_res_gamma_amp
+
+    features = pd.DataFrame(features, index = df.index, columns=['lambda_res', 'gamma', 'A'])
+    return features
+
 def highest_Q(
         df: pd.DataFrame,
         window: int,
@@ -518,5 +606,3 @@ def normalize_geom(
     geom_std = geom_np.std(axis=0)
     geom_np = (geom_np - geom_mean) / geom_std
     return geom_np
-
-
