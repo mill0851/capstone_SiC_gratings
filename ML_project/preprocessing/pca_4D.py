@@ -2,6 +2,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy.signal import find_peaks
 from util.data_preprocessing import *
+from preprocessing.pipelines import build_pca_pipeline
 
 
 #### DATA PREPROCESSING PIPELINE - PCA FEATURES ####
@@ -27,33 +28,20 @@ print(f'absorption data:\n{abs_data.head()}\n')
 print(f'absorption background:\n{abs_bg.head()}\n')
 
 
-# Normalize Spectrum
-normalize(refl_bg)
-normalize(abs_bg)
-normalize(refl_data)
-normalize(abs_data)
+# Build and fit preprocessing pipelines
+abs_pipe  = build_pca_pipeline(K, DOMAIN, INTERP, background=abs_bg)
+refl_pipe = build_pca_pipeline(K, DOMAIN, INTERP, background=refl_bg, flip=True)
 
-# Remove Background signal
-remove_background(refl_data, refl_bg)
-remove_background(abs_data, abs_bg)
+abs_ft_pca  = abs_pipe.fit_transform(abs_data)
+refl_ft_pca = refl_pipe.fit_transform(refl_data)
 
-# Reduce Domain
-reduce_domain(DOMAIN, refl_data)
-reduce_domain(DOMAIN, abs_data)
+abs_pca  = abs_pipe.named_steps['pca'].artifacts_
+refl_pca = refl_pipe.named_steps['pca'].artifacts_
 
-# Flip reflectance (consistent with other pipelines; peaks-up convention)
-refl_data *= -1.0
-print(f'Pre Interpolation Length: {len(refl_data.iloc[0])}\n')
-
-# Interpolate (Linear)
-refl_data = interp_linear(refl_data, INTERP)
-abs_data = interp_linear(abs_data, INTERP)
-wl = refl_data.columns.to_numpy(dtype=float)
-print(f'Post Interpolation Length: {len(refl_data.iloc[0])}\n')
-
-# Extract PCA Features + artifacts
-abs_ft_pca, abs_pca = extract_pca(abs_data, K, None, TEST_IDX)
-refl_ft_pca, refl_pca = extract_pca(refl_data, K, None, None)
+# Processed spectra (all steps except PCA) — used by exploration plots below
+abs_data  = abs_pipe[:-1].fit_transform(abs_data)
+refl_data = refl_pipe[:-1].fit_transform(refl_data)
+wl = abs_data.columns.to_numpy(dtype=float)
 
 print(f'Feature table (abs):\n{abs_ft_pca.head()}\n')
 print(f'Feature table (refl):\n{refl_ft_pca.head()}\n')
@@ -241,6 +229,47 @@ def plot_latent_colored_by_geom(features: pd.DataFrame,
     plt.show()
 
 plot_latent_colored_by_geom(abs_ft_pca, geom_table, geom_labels, 'Absorption')
+
+
+# 6) Reconstruction grid: data (target) vs K-component PCA reconstruction
+#    for each sample in TEST_IDX. Direct visual check of PCA fidelity.
+def plot_reconstruction_grid(df: pd.DataFrame, artifacts: dict,
+                              test_idx: np.ndarray, title: str,
+                              recon_modelled: np.ndarray | None = None) -> None:
+    wl_local = artifacts['wl']
+    X = df.to_numpy()
+    mean = artifacts['mean']
+    components = artifacts['components']
+    K_local = artifacts['K']
+
+    Xc = X - mean
+    coeffs = Xc @ components.T
+    recons = mean + coeffs @ components
+
+    n_plot = len(test_idx)
+    ncols = 4
+    nrows = (n_plot + ncols - 1) // ncols
+    fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3 * nrows), sharex=True)
+    axes_flat = np.atleast_1d(axes).flatten()
+    for i, idx in enumerate(test_idx):
+        ax = axes_flat[i]
+        ax.plot(wl_local, X[idx], color='k', label='Data')
+        ax.plot(wl_local, recons[idx], color='grey', linestyle='--',
+                label=f'True PCA (K={K_local})')
+        if recon_modelled is not None:
+            ax.plot(wl_local, recon_modelled[i], color='cyan', linestyle='--',
+                    label='Modelled')
+        ax.set_title(f"idx={int(idx)}", fontsize=9)
+        ax.grid(alpha=0.5)
+        if i == 0:
+            ax.legend(fontsize=9)
+    for j in range(n_plot, len(axes_flat)):
+        axes_flat[j].axis('off')
+    fig.suptitle(f"{title}: Data vs PCA Reconstruction (K={K_local})", fontsize=14)
+    fig.tight_layout()
+    plt.show()
+
+plot_reconstruction_grid(abs_data, abs_pca, TEST_IDX, 'Absorption')
 
 
 # Create export dict

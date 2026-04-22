@@ -2,7 +2,8 @@ from util.classes.PCADataset import *
 from util.classes.PcaMLP import *
 from util.model_eval import *
 from util.model_optimization import *
-from preprocessing.pca import pca_ft, data_config
+# from ML_project.preprocessing.pca_4D import pca_ft, data_config
+from preprocessing.pca_8D import pca_ft, data_config
 import json
 import os
 import math
@@ -10,8 +11,8 @@ import numpy as np
 import torch
 
 #### CREATE DIRECTORIES ####
-ROOT = "trained_models/pca"
-NAME = "optimized_model3"
+ROOT = "trained_models/pca_8D"
+NAME = "test"
 DIR = f'{ROOT}/{NAME}'
 os.makedirs(f'{DIR}', exist_ok=False)
 os.makedirs(f'{DIR}/config', exist_ok=True)
@@ -33,13 +34,14 @@ loader_config = {
 MLP_config = {
     "hidden_dim": 256,
     "n_layers": 3,
-    "k": 10,
-    "p": 0.03568396935731041
+    "k": 12,
+    "p": 0.07,
+    'input_dim': 8
 }
 train_config = {
     "epochs": 500,
-    "lr": 0.007503331087309652,
-    "wd": 0.0004279675620874819,
+    "lr": 5e-3,
+    "wd": 8e-4,
     "patience": 100,
     "path": f'{DIR}/models'
 }
@@ -54,6 +56,10 @@ data = PCADataset(
     normalize_feat = False
 )
 
+# Raw absorption spectra aligned with dataset order (used for 3-curve plots)
+_sorted_ids = pca_ft['geometry_table'].sort_index().index
+_raw_abs = pca_ft['absorption'].loc[_sorted_ids].to_numpy()
+
 kf_indices, test_indices = generate_kfold(
     data,
     loader_config['splits'],
@@ -66,7 +72,8 @@ model = PcaMLP(
     MLP_config['k'],
     MLP_config["hidden_dim"],
     MLP_config["n_layers"],
-    MLP_config['p']
+    MLP_config['p'],
+    input_dim = MLP_config["input_dim"]
 )
 
 
@@ -92,7 +99,8 @@ for i, (train_idx, val_idx) in enumerate(kf_indices):
         MLP_config['k'],
         MLP_config["hidden_dim"],
         MLP_config["n_layers"],
-        MLP_config['p']
+        MLP_config['p'],
+        input_dim=MLP_config["input_dim"]
     )
 
     train_loader, val_loader = create_dataloader_kfold(
@@ -161,7 +169,8 @@ final_model_net = PcaMLP(
     MLP_config['k'],
     MLP_config["hidden_dim"],
     MLP_config["n_layers"],
-    MLP_config['p']
+    MLP_config['p'],
+    input_dim=MLP_config["input_dim"]
 )
 
 # Reuse create_dataloader_kfold: val_loader here serves as the test loader,
@@ -287,6 +296,7 @@ with torch.no_grad():
     pred_sel = final_model_net(geom_sel)
     pred_spec_sel = data.reconstruct_spectrum(pred_sel).numpy()
     true_spec_sel = data.reconstruct_spectrum(feat_sel).numpy()
+    raw_spec_sel = _raw_abs[TEST_IDX]
 
 wl_plot = np.asarray(data.wl)
 n_plot = len(TEST_IDX)
@@ -296,7 +306,8 @@ fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3 * nrows), sharex=Tr
 axes_flat = np.atleast_1d(axes).flatten()
 for i, idx in enumerate(TEST_IDX):
     ax = axes_flat[i]
-    ax.plot(wl_plot, true_spec_sel[i], color='k', label='true')
+    ax.plot(wl_plot, raw_spec_sel[i], color='k', label='data')
+    ax.plot(wl_plot, true_spec_sel[i], color='grey', linestyle='--', label='true PCA')
     ax.plot(wl_plot, pred_spec_sel[i], color='cyan', label='predicted')
     ax.set_title(f"idx={int(idx)}")
     ax.grid(alpha=0.5)
@@ -305,6 +316,105 @@ for i, idx in enumerate(TEST_IDX):
 for j in range(n_plot, len(axes_flat)):
     axes_flat[j].axis('off')
 fig.suptitle("Final Model: True vs Reconstructed Absorption", fontsize=14)
+fig.tight_layout()
+plt.show()
+
+
+#### ENSEMBLE (FOLD MODELS) ####
+# Load all fold checkpoints and average their coefficient predictions.
+# reconstruct_spectrum is linear so averaging coeffs = averaging spectra.
+n_folds = loader_config['splits']
+fold_models = []
+for i in range(n_folds):
+    ckpt = torch.load(
+        f'{train_config["path"]}/fold{i}/best_pca_reg.pt',
+        weights_only=False
+    )
+    m = PcaMLP(
+        MLP_config['k'],
+        MLP_config['hidden_dim'],
+        MLP_config['n_layers'],
+        MLP_config['p'],
+        input_dim=MLP_config['input_dim']
+    )
+    m.load_state_dict(ckpt['model_state_dict'])
+    m.eval()
+    fold_models.append(m)
+
+# Evaluate ensemble on test set
+ens_coeff_sum = 0.0
+ens_recon_sum = 0.0
+ens_samples = 0
+ens_peak_abs_errs = []
+ens_peak_loc_errs = []
+_mse = torch.nn.MSELoss()
+
+with torch.no_grad():
+    for geom, feat in test_loader:
+        ensemble_coeffs = torch.stack([m(geom) for m in fold_models]).mean(dim=0)
+        pred_spec = data.reconstruct_spectrum(ensemble_coeffs)
+        true_spec = data.reconstruct_spectrum(feat)
+
+        batch_n = geom.shape[0]
+        ens_coeff_sum += _mse(ensemble_coeffs, feat).item() * batch_n
+        ens_recon_sum += ((pred_spec - true_spec) ** 2).mean().item() * batch_n
+        ens_samples += batch_n
+
+        pred_peak = pred_spec.max(dim=-1)
+        true_peak = true_spec.max(dim=-1)
+        ens_peak_abs_errs.append((pred_peak.values - true_peak.values).abs())
+        ens_peak_loc_errs.append((wl_tensor[pred_peak.indices] - wl_tensor[true_peak.indices]).abs())
+
+ens_coeff_mse = ens_coeff_sum / max(ens_samples, 1)
+ens_recon_mse = ens_recon_sum / max(ens_samples, 1)
+ens_peak_mae  = torch.cat(ens_peak_abs_errs).mean().item()
+ens_peak_loc  = torch.cat(ens_peak_loc_errs).mean().item()
+
+ensemble_metrics = {
+    "test_coeff_mse":      float(ens_coeff_mse),
+    "test_recon_mse":      float(ens_recon_mse),
+    "test_recon_rmse":     float(math.sqrt(ens_recon_mse)),
+    "peak_mae":            float(ens_peak_mae),
+    "peak_loc_error_um":   float(ens_peak_loc),
+    "n_models":            n_folds,
+    "n_test":              int(ens_samples),
+}
+
+em_w = max(len(k) for k in ensemble_metrics) + 2
+print(f"\n{'='*72}")
+print(f"Ensemble ({n_folds} fold models, evaluated once on test)")
+print(f"{'='*72}")
+for k, v in ensemble_metrics.items():
+    fmt = f"{v:>12.6g}" if isinstance(v, float) else f"{v:>12d}"
+    print(f"{k:<{em_w}} {fmt}")
+print("=" * 72)
+
+# Save ensemble metrics alongside the rest
+kfold_results['ensemble'] = ensemble_metrics
+with open(f'{DIR}/config/kfold_metrics.json', "w") as f:
+    json.dump(kfold_results, f, indent=4, default=_json_default)
+
+#### PLOT ENSEMBLE RECONSTRUCTIONS ####
+with torch.no_grad():
+    geom_sel = data.geom[TEST_IDX]
+    feat_sel = data.feat[TEST_IDX]
+    ens_coeffs_sel = torch.stack([m(geom_sel) for m in fold_models]).mean(dim=0)
+    ens_spec_sel = data.reconstruct_spectrum(ens_coeffs_sel).numpy()
+
+fig, axes = plt.subplots(nrows, ncols, figsize=(4 * ncols, 3 * nrows), sharex=True)
+axes_flat = np.atleast_1d(axes).flatten()
+for i, idx in enumerate(TEST_IDX):
+    ax = axes_flat[i]
+    ax.plot(wl_plot, raw_spec_sel[i], color='k', label='data')
+    ax.plot(wl_plot, true_spec_sel[i], color='grey', linestyle='--', label='true PCA')
+    ax.plot(wl_plot, ens_spec_sel[i], color='cyan', label='ensemble')
+    ax.set_title(f"idx={int(idx)}")
+    ax.grid(alpha=0.5)
+    if i == 0:
+        ax.legend()
+for j in range(n_plot, len(axes_flat)):
+    axes_flat[j].axis('off')
+fig.suptitle(f"Ensemble ({n_folds} folds): True vs Reconstructed Absorption", fontsize=14)
 fig.tight_layout()
 plt.show()
 

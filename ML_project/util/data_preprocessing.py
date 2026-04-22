@@ -485,3 +485,36 @@ def pca_reconstruct(
     components = artifacts['components']
     coeffs = np.asarray(coeffs)
     return mean + coeffs @ components
+
+def derive_geometry_features(
+        geom_df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Augments a 4D geometry table (tlw, blw, h, s) with 4 physically motivated
+    derived features, returning an 8D table.
+
+    Derived features:
+        width_sum    = tlw + blw            (total ridge width; fill-factor proxy)
+        width_diff   = tlw - blw            (taper sign and magnitude)
+        aspect_ratio = h / s               (depth-to-period ratio; coupling strength)
+        fill_factor  = (tlw + blw) / (2*s) (fraction of period occupied by material)
+
+    Args:
+        geom_df (pd.DataFrame): indexed by run_id, columns ['tlw', 'blw', 'h', 's']
+
+    Returns:
+        pd.DataFrame: same index, 8 columns (original 4 + 4 derived)
+    """
+    df = geom_df.copy()
+    df['width_sum']    = df['tlw'] + df['blw']
+    df['width_diff']   = df['tlw'] - df['blw']
+    df['aspect_ratio'] = df['h'] / (df['s'] + 1e-8)
+    df['fill_factor']  = (df['tlw'] + df['blw']) / (2.0 * df['s'] + 1e-8)
+    return df
+
+def normalize_geom(
+        geom_df: pd.DataFrame) -> np.ndarray:
+    geom_np = geom_df.values.astype(np.float32)
+    geom_mean = geom_np.mean(axis=0)
+    geom_std = geom_np.std(axis=0)
+    geom_np = (geom_np - geom_mean) / geom_std
+    return geom_np

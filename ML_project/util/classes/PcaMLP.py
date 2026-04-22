@@ -16,7 +16,7 @@ class PcaMLP(nn.Module):
     over different PCA truncations (K=10, 20, 30, ...).
     """
 
-    def __init__(self, K: int, hidden_dim: int, n_layers: int, p: float):
+    def __init__(self, K: int, hidden_dim: int, n_layers: int, p: float, input_dim: int = 4):
         super().__init__()
 
         self.K = K
@@ -24,7 +24,7 @@ class PcaMLP(nn.Module):
         layers = []
 
         # input layer
-        layers.append(nn.Linear(4, hidden_dim))
+        layers.append(nn.Linear(input_dim, hidden_dim))
         layers.append(nn.ReLU())
         layers.append(nn.Dropout(p))
 

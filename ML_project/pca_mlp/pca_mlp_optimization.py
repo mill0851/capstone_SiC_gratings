@@ -19,7 +19,7 @@ from util.classes.PCADataset import *
 from util.classes.PcaMLP import *
 from util.model_eval import *
 from util.model_optimization import *
-from preprocessing.pca import pca_ft, data_config
+from ML_project.preprocessing.pca_4D import pca_ft, data_config
 
 import json
 import os
