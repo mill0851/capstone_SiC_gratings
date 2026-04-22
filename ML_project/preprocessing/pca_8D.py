@@ -9,10 +9,10 @@ from preprocessing.pipelines import build_pca_pipeline
 #### DATA PREPROCESSING PIPELINE - PCA FEATURES (8D GEOMETRY) ####
 # Config
 pd.set_option('display.max_columns', 10)
-DATA_PATH = '../data/batch2'
+DATA_PATH = './data/batch2'
 DOMAIN = (10.25, 11.0)
 INTERP = 4
-K = 26
+K = 12
 
 # Import Data
 geom_labels, geom_table, refl_data, abs_data, refl_bg, abs_bg, wl = import_data(DATA_PATH)

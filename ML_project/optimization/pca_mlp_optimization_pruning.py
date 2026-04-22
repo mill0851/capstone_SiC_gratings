@@ -27,7 +27,7 @@ trial's score.
 Switch between pipelines via the PIPELINE constant below.
 """
 
-PIPELINE = "4D"  # "4D" or "8D"
+PIPELINE = "8D"  # "4D" or "8D"
 NAME = "optimization1"
 
 from util.classes.PCADataset import *
