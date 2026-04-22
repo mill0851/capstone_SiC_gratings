@@ -83,7 +83,7 @@ SEARCH_RANGES = {
 
 OUTPUT_JSON = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
-    f"pca_mlp_{NAME}_{PIPELINE}.json"
+    f"pca_mlp_{NAME}_pruning_{PIPELINE}.json"
 )
 
 
