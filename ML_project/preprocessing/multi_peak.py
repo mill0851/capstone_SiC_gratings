@@ -8,7 +8,7 @@ from util.data_preprocessing import *
 pd.set_option('display.max_columns', 10)
 DATA_PATH = './data/batch2'
 DOMAIN = (10.25, 11.0)
-TEST_IDX = np.arange(0, 1024, 10)
+TEST_IDX = np.arange(0, 1024, 512)
 INTERP = 4
 WINDOW = 10
 THRESHOLD = 0.2
@@ -72,7 +72,7 @@ print(f'Feature table (abs):\n{abs_ft_multi}\n')
 print(f'Feature table (refl):\n{refl_ft_multi}\n')
 
 # Create export dict
-mutli_peak_ft = {
+multi_peak_ft = {
     "wl": wl,
     "reflection": refl_data,
     "absorption": abs_data,
@@ -83,5 +83,8 @@ mutli_peak_ft = {
     "peak_count": N_PEAKS
 }
 
-
-
+# Save to pickle
+import pickle
+with open('multi_peak_ft.pkl', 'wb') as f:
+    pickle.dump(multi_peak_ft, f)
+print("Saved multi_peak_ft.pkl")

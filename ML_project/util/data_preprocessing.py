@@ -197,6 +197,7 @@ def max_A(
     wl = df.columns.to_numpy(dtype=float)
     data = df.to_numpy()
     features = np.zeros((len(df), 3))
+    test_plot_data = []
 
     for rowIdx, row in enumerate(data):
         fit_curves = []
@@ -253,20 +254,47 @@ def max_A(
                 best_res_gamma_amp[2] = A
 
         if test_idx is not None and rowIdx in test_idx:
-            plt.figure(figsize=(10,6))
-            plt.plot(wl, row, label="Data", color='k')
-            for fitIdx, _ in enumerate(fit_curves):
-                plt.plot(fit_wl_arr[fitIdx],
-                         fit_curves[fitIdx],
-                         label=f'Lorentzian fit {fitIdx}')
-            plt.xlabel("Wavelength (um)", fontsize=16)
-            plt.ylabel("a.u. Absorption/Reflection Proxy", fontsize=16)
-            plt.title(f"Cruve {rowIdx} With Fits", fontsize=18)
-            plt.grid(alpha=0.8)
-            plt.legend(fontsize=16)
-            plt.show()
+            test_plot_data.append({
+                'rowIdx': rowIdx,
+                'row': row,
+                'fit_curves': fit_curves,
+                'fit_wl_arr': fit_wl_arr
+            })
 
         features[rowIdx,:] = best_res_gamma_amp
+
+    if test_plot_data:
+        n_plot = len(test_plot_data)
+        ncols = 4
+        nrows = (n_plot + ncols - 1) // ncols
+        fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows), sharex=True)
+        axes_flat = np.atleast_1d(axes).flatten()
+
+        for i, plot_info in enumerate(test_plot_data):
+            ax = axes_flat[i]
+            rowIdx = plot_info['rowIdx']
+            row = plot_info['row']
+            fit_curves = plot_info['fit_curves']
+            fit_wl_arr = plot_info['fit_wl_arr']
+
+            ax.plot(wl, row, label="Data", color='k', linewidth=2)
+            for fitIdx in range(len(fit_curves)):
+                ax.plot(fit_wl_arr[fitIdx],
+                        fit_curves[fitIdx],
+                        label=f'Fit {fitIdx}', linestyle='--')
+            ax.set_title(f"idx={rowIdx}", fontsize=10)
+            ax.grid(alpha=0.5)
+            if i == 0:
+                ax.legend(fontsize=9)
+
+        for j in range(n_plot, len(axes_flat)):
+            axes_flat[j].axis('off')
+
+        fig.suptitle("Lorentzian Fits for Test Curves", fontsize=14)
+        fig.text(0.5, 0.02, "Wavelength (um)", ha='center', fontsize=12)
+        fig.text(0.02, 0.5, "a.u. Absorption/Reflection Proxy", va='center', rotation='vertical', fontsize=12)
+        fig.tight_layout()
+        plt.show()
 
     features = pd.DataFrame(features, index = df.index, columns=['lambda_res', 'gamma', 'A'])
     return features

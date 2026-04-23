@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from sklearn.pipeline import Pipeline
 from preprocessing.transformers import (
     SpectrumNormalizer,
@@ -36,6 +37,9 @@ def build_pca_pipeline(
 def build_peak_pipeline(
         bounds: tuple[float, float],
         n_interp: int,
+        window: int,
+        threshold: float,
+        test_idx: np.ndarray | None = None,
         background: pd.DataFrame | None = None,
         flip: bool = False,
 ) -> Pipeline:
@@ -52,5 +56,5 @@ def build_peak_pipeline(
     if flip:
         steps.append(('flip', SpectrumFlipper()))
 
-    steps.append(('peak', MaxPeakExtractor()))
+    steps.append(('peak', MaxPeakExtractor(window=window, threshold=threshold, test_idx=test_idx)))
     return Pipeline(steps)
