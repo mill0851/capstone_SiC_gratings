@@ -299,6 +299,135 @@ def max_A(
     features = pd.DataFrame(features, index = df.index, columns=['lambda_res', 'gamma', 'A'])
     return features
 
+def max_N_A(
+        df: pd.DataFrame,
+        N: int,
+        window: int,
+        threshold: float,
+        test_idx: np.ndarray | None = None) -> pd.DataFrame:
+    """
+    Lorentzian fits are calculated for all peaks above `threshold` and the
+    top-N peaks by fitted amplitude are kept, ordered high-to-low. For each
+    kept peak, (lambda_res, gamma, A) is stored. If fewer than N peaks are
+    successfully fit, the remaining slots are zero-padded.
+
+    Output columns: lambda_0, gamma_0, A_0, ..., lambda_{N-1}, gamma_{N-1}, A_{N-1}
+    where rank 0 is the highest-amplitude peak. Mask generation (detecting
+    zero-padded slots) is left to the downstream dataset class.
+
+    Args:
+        df (pd.DataFrame): pivoted spectrum table (rows=samples, cols=wavelengths)
+        N (int): number of peaks to keep per row (sorted by amplitude)
+        window (int): half-width in samples of the Lorentzian fit region
+        threshold (float): minimum peak height to consider
+        test_idx (np.ndarray, optional): sample indices to plot with their fits
+
+    Returns:
+        pd.DataFrame: (S, 3N) feature table
+    """
+    wl = df.columns.to_numpy(dtype=float)
+    data = df.to_numpy()
+    features = np.zeros((len(df), 3 * N))
+    test_plot_data = []
+
+    for rowIdx, row in enumerate(data):
+        fit_curves = []
+        fit_wl_arr = []
+        peaks, _ = find_peaks(row, height=threshold)
+
+        # (A, wl_res, gamma) triples for all successful fits on this row
+        fits = []
+
+        for p in peaks:
+            left_idx = max(0, p - window)
+            right_idx = min(len(row), p + window)
+
+            fit_region = row[left_idx:right_idx]
+            fit_wl = wl[left_idx:right_idx]
+
+            A0 = row[p]
+            wl0 = wl[p]
+            gamma0 = (fit_wl[-1] - fit_wl[0]) / 10
+            p0 = [A0, wl0, gamma0]
+
+            try:
+                popt, _ = curve_fit(
+                    lorentzian,
+                    fit_wl,
+                    fit_region,
+                    p0=p0,
+                    bounds=(
+                        [0, fit_wl[0], 0],
+                        [np.inf, fit_wl[-1], np.inf]
+                    ),
+                    maxfev=10000
+                )
+            except RuntimeError:
+                continue
+
+            A = popt[0]
+            wl_res = popt[1]
+            gamma = popt[2]
+            fits.append((A, wl_res, gamma))
+
+            fit_curves.append(lorentzian(fit_wl, *popt))
+            fit_wl_arr.append(fit_wl)
+
+        # Sort by amplitude descending; keep top N
+        fits.sort(key=lambda t: t[0], reverse=True)
+        for rank in range(min(N, len(fits))):
+            A, wl_res, gamma = fits[rank]
+            features[rowIdx, 3 * rank + 0] = wl_res
+            features[rowIdx, 3 * rank + 1] = gamma
+            features[rowIdx, 3 * rank + 2] = A
+
+        if test_idx is not None and rowIdx in test_idx:
+            test_plot_data.append({
+                'rowIdx': rowIdx,
+                'row': row,
+                'fit_curves': fit_curves,
+                'fit_wl_arr': fit_wl_arr,
+            })
+
+    if test_plot_data:
+        n_plot = len(test_plot_data)
+        ncols = 4
+        nrows = (n_plot + ncols - 1) // ncols
+        fig, axes = plt.subplots(nrows, ncols, figsize=(5 * ncols, 4 * nrows), sharex=True)
+        axes_flat = np.atleast_1d(axes).flatten()
+
+        for i, plot_info in enumerate(test_plot_data):
+            ax = axes_flat[i]
+            rowIdx = plot_info['rowIdx']
+            row = plot_info['row']
+            fit_curves = plot_info['fit_curves']
+            fit_wl_arr = plot_info['fit_wl_arr']
+
+            ax.plot(wl, row, label="Data", color='k', linewidth=2)
+            for fitIdx in range(len(fit_curves)):
+                ax.plot(fit_wl_arr[fitIdx],
+                        fit_curves[fitIdx],
+                        label=f'Fit {fitIdx}', linestyle='--')
+            ax.set_title(f"idx={rowIdx}", fontsize=10)
+            ax.grid(alpha=0.5)
+            if i == 0:
+                ax.legend(fontsize=9)
+
+        for j in range(n_plot, len(axes_flat)):
+            axes_flat[j].axis('off')
+
+        fig.suptitle(f"Top-{N} Lorentzian Fits for Test Curves", fontsize=14)
+        fig.text(0.5, 0.02, "Wavelength (um)", ha='center', fontsize=12)
+        fig.text(0.02, 0.5, "a.u. Absorption/Reflection Proxy", va='center', rotation='vertical', fontsize=12)
+        fig.tight_layout()
+        plt.show()
+
+    cols = []
+    for rank in range(N):
+        cols.extend([f'lambda_{rank}', f'gamma_{rank}', f'A_{rank}'])
+    features = pd.DataFrame(features, index=df.index, columns=cols)
+    return features
+
 def highest_Q(
         df: pd.DataFrame,
         window: int,

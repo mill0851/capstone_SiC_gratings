@@ -180,7 +180,8 @@ def segment_structures_with_intersections(
         x, y, baseline,
         eps=0.0,
         min_points=30,
-        min_width=1.0):
+        min_width=1.0,
+        return_positions=False):
     """
     Split AFM line scan into complete structures defined as regions
     above a baseline, and include the exact baseline intersection
@@ -234,6 +235,7 @@ def segment_structures_with_intersections(
         return x0 + t * (x1 - x0)
 
     segments = []
+    positions = []
 
     for s_i, e_i in zip(start_idx, end_idx):
         # Intersections at entry and exit
@@ -256,7 +258,10 @@ def segment_structures_with_intersections(
             continue
 
         segments.append((x_seg - np.min(x_seg), y_seg - np.min(y_seg)))
+        positions.append((float(x_left), float(x_right)))
 
+    if return_positions:
+        return segments, positions
     return segments
 
 def trapezoidal_fit_segments(segments, top_fraction=0.9):
@@ -508,6 +513,21 @@ def fit_rmse(AFM_data):
         
         data['rmse'] = rmse_arr
 
+def extract_spacing(AFM_data):
+    """Compute groove-to-groove spacing (gap between adjacent grooves) per record.
+    Adds 'sS' (list), 'sS mean', 'sS std' to each record. Requires 'groove positions'
+    (list of (x_left_abs, x_right_abs) tuples) populated by process_data."""
+    for data in AFM_data:
+        positions = data.get('groove positions', [])
+        spacings = []
+        for i in range(len(positions) - 1):
+            gap = positions[i + 1][0] - positions[i][1]
+            spacings.append(float(gap))
+
+        data['sS'] = spacings
+        data['sS mean'] = float(np.mean(spacings)) if spacings else float('nan')
+        data['sS std'] = float(np.std(spacings)) if spacings else float('nan')
+
 def extract_tlw_blw(AFM_data):
     for data in AFM_data:
         tlw_arr = []
@@ -602,13 +622,24 @@ def process_data(afm_data,
         # divides each data set into a set of data points
         # for each grating groove in the set
         grooves_raw = segment_structures_with_intersections(x_dense, y_raw_level, blw_lvl * np.max(y_raw_level), min_points=min_segment_length)
-        grooves_smooth = segment_structures_with_intersections(x_dense, y_smooth_level, blw_lvl * np.max(y_smooth_level), min_points=min_segment_length)
+        grooves_smooth, groove_positions = segment_structures_with_intersections(
+            x_dense, y_smooth_level, blw_lvl * np.max(y_smooth_level),
+            min_points=min_segment_length, return_positions=True
+        )
 
         print("Number of grooves (raw) = " + str(len(grooves_raw)))
         print("Number of grooves (smooth) = " + str(len(grooves_smooth)))
 
+        data['x dense'] = x_dense
+        data['y dense'] = y_dense
+        data['y smooth dense'] = y_smooth_dense
+        data['baseline'] = baseline
+        data['y raw level'] = y_raw_level
+        data['y smooth level'] = y_smooth_level
+
         data['grooves raw'] = grooves_raw
         data['grooves smooth'] = grooves_smooth
+        data['groove positions'] = groove_positions
         data['groove count'] = len(grooves_smooth)
 
             # ---- DATA FITTING ----
@@ -631,3 +662,4 @@ def process_data(afm_data,
     
     fit_rmse(afm_data)
     extract_tlw_blw(afm_data)
+    extract_spacing(afm_data)

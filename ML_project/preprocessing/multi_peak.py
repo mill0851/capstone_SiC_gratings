@@ -26,31 +26,31 @@ print(f'absorption background:\n{abs_bg.head()}\n')
 #     refl_vs_abs_plt(refl_data, abs_data, int(idx))
 
 # Normalize Spectrum
-normalize(refl_bg)
+# normalize(refl_bg)
 normalize(abs_bg)
-normalize(refl_data)
+# normalize(refl_data)
 normalize(abs_data)
 # refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
 
 # Remove Background signal
-remove_background(refl_data, refl_bg)
+# remove_background(refl_data, refl_bg)
 remove_background(abs_data, abs_bg)
 # refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
 
 # Reduce Domain
-reduce_domain(DOMAIN, refl_data)
+# reduce_domain(DOMAIN, refl_data)
 reduce_domain(DOMAIN, abs_data)
 # refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
 
 # Flip reflectance data for feature extraction
-refl_data *= -1.0
-print(f'Pre Interpolation Length: {len(refl_data.iloc[0])}\n')
+# refl_data *= -1.0
+print(f'Pre Interpolation Length: {len(abs_data.iloc[0])}\n')
 
 # Interpolate (Linear)
-refl_data = interp_linear(refl_data, INTERP)
+# refl_data = interp_linear(refl_data, INTERP)
 abs_data = interp_linear(abs_data, INTERP)
-wl = refl_data.columns.to_numpy(dtype=float)
-print(f'Post Interpolation Length: {len(refl_data.iloc[0])}\n')
+wl = abs_data.columns.to_numpy(dtype=float)
+print(f'Post Interpolation Length: {len(abs_data.iloc[0])}\n')
 # refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
 
 # Extract Feature Table
@@ -61,22 +61,12 @@ abs_ft_multi = multi_peak_extraction(
     N_PEAKS,
     TEST_IDX
 )
-refl_ft_multi = multi_peak_extraction(
-    refl_data,
-    WINDOW,
-    THRESHOLD,
-    N_PEAKS,
-    TEST_IDX
-)
 print(f'Feature table (abs):\n{abs_ft_multi}\n')
-print(f'Feature table (refl):\n{refl_ft_multi}\n')
 
 # Create export dict
 multi_peak_ft = {
     "wl": wl,
-    "reflection": refl_data,
     "absorption": abs_data,
-    "reflection_features": refl_ft_multi,
     "absorption_features": abs_ft_multi,
     "geometry_labels": geom_labels,
     "geometry_table": geom_table,

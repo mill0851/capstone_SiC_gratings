@@ -91,6 +91,34 @@ ax.legend()
 plt.tight_layout()
 plt.show()
 
+# Plot full sample space colored by height (h)
+fig2 = plt.figure(figsize=(12, 9))
+ax2 = fig2.add_subplot(111, projection='3d')
+
+scatter_h = ax2.scatter(
+    df_combined['tlw'],
+    df_combined['blw'],
+    df_combined['s'],
+    c=df_combined['h'],
+    cmap='viridis',
+    s=30,
+    alpha=0.7,
+)
+
+cbar = fig2.colorbar(scatter_h, ax=ax2, shrink=0.6, pad=0.1)
+cbar.set_label('H', fontsize=18)
+
+# Add semi-transparent red plane at tlw=blw
+ax2.plot_surface(TLW, BLW, S, alpha=0.1, color='red')
+
+ax2.set_xlabel('TLW', fontsize=18)
+ax2.set_ylabel('BLW', fontsize=18)
+ax2.set_zlabel('S', fontsize=18)
+ax2.set_title('Full Sample Space Colored by Height')
+
+plt.tight_layout()
+plt.show()
+
 # Set df_final to df_combined (no additional transformations)
 df_final = df_combined.copy()
 

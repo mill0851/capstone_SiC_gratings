@@ -12,7 +12,7 @@ pd.set_option('display.max_columns', 10)
 DATA_PATH = './data/batch2'
 DOMAIN = (10.25, 11.0)
 INTERP = 4
-K = 12
+K = 26
 
 # Import Data
 geom_labels, geom_table, refl_data, abs_data, refl_bg, abs_bg, wl = import_data(DATA_PATH)
@@ -57,3 +57,8 @@ data_config = {
     "geometry_dim": 8,
     "derived_features": ["width_sum", "width_diff", "aspect_ratio", "fill_factor"],
 }
+
+# Re-export under a distinct name so the optimization notebook can import the
+# 4D and 8D feature dicts side-by-side without one shadowing the other.
+pca_ft_8D = pca_ft
+data_config_8D = data_config

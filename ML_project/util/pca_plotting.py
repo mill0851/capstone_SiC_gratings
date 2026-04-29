@@ -8,12 +8,14 @@ def plot_scree(artifacts: dict, title: str, k_max: int = 80) -> None:
     cum = np.cumsum(evr)
     idx = np.arange(1, len(evr) + 1)
 
-    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    _, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6), layout='constrained')
     ax1.bar(idx, evr, color='steelblue')
-    ax1.set_xlabel('Principal component', fontsize=12)
-    ax1.set_ylabel('Explained variance ratio', fontsize=12)
-    ax1.set_title(f'{title} - Scree', fontsize=14, fontweight='bold')
-    ax1.set_yscale('log')
+    ax1.set_xlabel('Principal component', fontsize=16)
+    ax1.set_ylabel('Explained variance ratio', fontsize=16)
+    ax1.set_title(f'{title} - Scree', fontsize=18, fontweight='bold')
+    # ax1.set_yscale('log')
+    ax1.tick_params(axis='x', labelsize=12)
+    ax1.tick_params(axis='y', labelsize=12)
     ax1.grid(True, alpha=0.3)
 
     ax2.plot(idx, cum, 'o-', color='darkred')
@@ -23,10 +25,12 @@ def plot_scree(artifacts: dict, title: str, k_max: int = 80) -> None:
         if k_hit is not None:
             ax2.annotate(f'{thr:g}: K={k_hit}', xy=(k_hit, thr),
                          xytext=(5, -15), textcoords='offset points')
-    ax2.set_xlabel('Number of components K', fontsize=12)
-    ax2.set_ylabel('Cumulative explained variance', fontsize=12)
-    ax2.set_title(f'{title} - Cumulative EV', fontsize=14, fontweight='bold')
+    ax2.set_xlabel('Number of components K', fontsize=16)
+    ax2.set_ylabel('Cumulative explained variance', fontsize=16)
+    ax2.set_title(f'{title} - Cumulative EV', fontsize=18, fontweight='bold')
     ax2.grid(True, alpha=0.3)
+    ax1.tick_params(axis='x', labelsize=12)
+    ax1.tick_params(axis='y', labelsize=12)
     plt.tight_layout()
     plt.show()
 

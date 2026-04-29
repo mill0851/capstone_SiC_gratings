@@ -8,7 +8,7 @@ from util.data_preprocessing import *
 pd.set_option('display.max_columns', 5)
 DATA_PATH = './data/batch2'
 DOMAIN = (10.25, 11.0)
-TEST_IDX = np.arange(0, 1024, 10)
+TEST_IDX = np.arange(0, 1900, 150)
 INTERP = 4
 WINDOW = 10
 THRESHOLD = 0.2
@@ -22,8 +22,8 @@ print(f'reflection background:\n{refl_bg.head()}\n')
 print(f'absorption data:\n{abs_data.head()}\n')
 print(f'absorption background:\n{abs_bg.head()}\n')
 print(len(refl_data))
-# for idx in TEST_IDX:
-#     refl_vs_abs_plt(refl_data, abs_data, int(idx))
+for idx in TEST_IDX:
+    refl_vs_abs_plt(refl_data, abs_data, int(idx))
 
 # Normalize Spectrum
 normalize(refl_bg)
@@ -51,7 +51,8 @@ refl_data = interp_linear(refl_data, INTERP)
 abs_data = interp_linear(abs_data, INTERP)
 wl = refl_data.columns.to_numpy(dtype=float)
 print(f'Post Interpolation Length: {len(refl_data.iloc[0])}\n')
-# refl_vs_abs_plt(refl_data, abs_data, TEST_IDX)
+for idx in TEST_IDX:
+    refl_vs_abs_plt(refl_data, abs_data, int(idx))
 
 # Extract Feature Table & Plot curves with fit
 abs_ft_single = highest_Q(

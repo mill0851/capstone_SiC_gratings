@@ -9,7 +9,7 @@ from preprocessing.pipelines import build_pca_pipeline
 #### DATA PREPROCESSING PIPELINE - PCA FEATURES (8D GEOMETRY) ####
 # Config
 pd.set_option('display.max_columns', 10)
-DATA_PATH = '../data/batch2'
+DATA_PATH = './data/batch2'
 DOMAIN = (10.25, 11.0)
 INTERP = 4
 K = 26
@@ -50,6 +50,10 @@ data_config = {
     "domain": DOMAIN,
     "interpolation_density": INTERP,
     "K": K,
-    "geometry_dim": 8,
-    "derived_features": ["width_sum", "width_diff", "aspect_ratio", "fill_factor"],
+    "geometry_dim": 4,
 }
+
+# Re-export under a distinct name so the optimization notebook can import the
+# 4D and 8D feature dicts side-by-side without one shadowing the other.
+pca_ft_4D = pca_ft
+data_config_4D = data_config

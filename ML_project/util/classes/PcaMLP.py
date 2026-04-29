@@ -78,7 +78,7 @@ def train_pca_regression(
         "K": model.K
     }
 
-    best_reg_loss = float('inf')
+    best_recon_loss = float('inf')
     patience_counter = 0
 
     for epoch in range(epochs):
@@ -94,6 +94,7 @@ def train_pca_regression(
             loss_reg = mse(reg_pred, feat)
 
             loss_reg.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             batch_n = geom.shape[0]
@@ -143,8 +144,11 @@ def train_pca_regression(
         #       f"Val RECON: {val_recon_loss:.3e} | "
         #       f"Patience: {patience_counter}/{patience}")
 
-        if val_reg_loss < best_reg_loss:
-            best_reg_loss = val_reg_loss
+        # Early stopping and checkpoint selection on reconstruction-space MSE.
+        # Coeff-space MSE is a proxy; recon MSE is the metric we ultimately
+        # report, so select the best epoch by it directly.
+        if val_recon_loss < best_recon_loss:
+            best_recon_loss = val_recon_loss
             patience_counter = 0
             history["stop_epoch"] = epoch
             torch.save({
@@ -158,7 +162,7 @@ def train_pca_regression(
                 print(f"Early stopping triggered at epoch {epoch+1}")
                 break
 
-        scheduler.step(val_reg_loss)
+        scheduler.step(val_recon_loss)
 
     checkpoint = torch.load(f"{path}/best_pca_reg.pt", weights_only=False)
     model.load_state_dict(checkpoint["model_state_dict"])
@@ -181,6 +185,13 @@ def train_pca_regression_final(
     """
 
     optimizer = optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
+    # Same scheduler dynamics as the fold trainer, but keyed to a smoothed
+    # train loss (no val set here). patience bumped 10 -> 15 and a small
+    # rel threshold to absorb train-loss noise from dropout.
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer, mode='min', factor=0.5, patience=15,
+        threshold=1e-3, threshold_mode='rel'
+    )
     mse = nn.MSELoss()
 
     history = {
@@ -189,6 +200,8 @@ def train_pca_regression_final(
         "epochs": epochs,
         "K": model.K,
     }
+
+    smooth_window = 5
 
     for epoch in range(epochs):
         model.train()
@@ -202,6 +215,7 @@ def train_pca_regression_final(
             loss_reg = mse(reg_pred, feat)
 
             loss_reg.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
 
             batch_n = geom.shape[0]
@@ -220,7 +234,11 @@ def train_pca_regression_final(
         history["train_loss"].append(train_reg_loss)
         history["train_loss_recon"].append(train_recon_loss)
 
+        smoothed = float(np.mean(history["train_loss"][-smooth_window:]))
+        scheduler.step(smoothed)
+
         print(f"Final | Epoch {epoch+1:03d}/{epochs} | K={model.K:3d} | "
+              f"lr={optimizer.param_groups[0]['lr']:.2e} | "
               f"Train REG: {train_reg_loss:.6f} | "
               f"Train RECON: {train_recon_loss:.3e}")
 

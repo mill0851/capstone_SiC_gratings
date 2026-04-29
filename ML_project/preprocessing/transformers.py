@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from util.data_preprocessing import (
     normalize, remove_background, reduce_domain, interp_linear, extract_pca,
-    max_A,
+    max_A, max_N_A,
 )
 
 
@@ -73,3 +73,20 @@ class MaxPeakExtractor(BaseEstimator, TransformerMixin):
 
     def transform(self, X):
         return max_A(X, self.window, self.threshold, self.test_idx)
+
+class MultiPeakExtractor(BaseEstimator, TransformerMixin):
+    def __init__(
+            self,
+            N: int,
+            window: int,
+            threshold: float,
+            test_idx: np.ndarray | None = None):
+        self.N = N
+        self.window = window
+        self.threshold = threshold
+        self.test_idx = test_idx
+
+    def fit(self, X, y=None): return self
+
+    def transform(self, X):
+        return max_N_A(X, self.N, self.window, self.threshold, self.test_idx)

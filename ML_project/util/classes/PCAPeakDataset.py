@@ -8,16 +8,16 @@ class PCAPeakDataset(Dataset):
     """
     Dataset for the multi-task PCA + peak surrogate:
     Geometry ('tlw', 'blw', 'h', 's') --> (pc_0, ..., pc_{K-1}) and
-                                          (lambda_res, gamma, A) of the
-                                          max-amplitude peak.
+                                          (lambda_k, gamma_k, A_k) for the
+                                          top-N peaks by amplitude.
 
-    A held reference to the PCA artifacts (mean + components) lets the
-    dataset reconstruct a full spectrum from predicted coefficients,
-    so the model can be evaluated in spectrum space without re-fitting PCA.
+    Peak target layout per sample (length 3N):
+        [lambda_0, gamma_0, A_0, lambda_1, gamma_1, A_1, ..., lambda_{N-1}, gamma_{N-1}, A_{N-1}]
+    where rank 0 is the highest-amplitude peak (produced by max_N_A). Samples
+    with fewer than N peaks are zero-padded on the unused slots.
 
-    A per-sample mask is exposed so the peak-head loss can be ignored
-    on samples with no resonance in the domain (the (lambda, gamma, A)
-    triple is then all zeros).
+    A per-peak mask of shape (N,) is exposed so the peak-head loss can be
+    applied only where a real peak is present.
 
     Supports:
         > PcaPeakMLP (PCA-coefficient regression + auxiliary peak head)
@@ -35,23 +35,20 @@ class PCAPeakDataset(Dataset):
     ):
         """
         Args:
-            geom_df (pd.DataFrame): indexed by run_xxxx, columns ['tlw', 'blw', 'h', 's']
-            pca_df (pd.DataFrame): indexed by run_xxxx, columns ['pc_0', ..., 'pc_{K-1}']
-                (output of extract_pca)
-            amp_df (pd.DataFrame): indexed by run_xxxx, columns ['lambda_res', 'gamma', 'A']
-                (output of max_A). Rows with no detected peak should be all-zero.
-            pca_artifacts (dict): artifacts dict from extract_pca containing at least
-                'mean' (L,), 'components' (K, L), 'wl' (L,). Stored so the dataset
-                can reconstruct spectra from predicted coefficients.
+            geom_df (pd.DataFrame): indexed by run_xxxx, geometry columns.
+            pca_df (pd.DataFrame): indexed by run_xxxx, columns ['pc_0', ..., 'pc_{K-1}'].
+            amp_df (pd.DataFrame): indexed by run_xxxx, (S, 3N) columns laid out
+                [lambda_0, gamma_0, A_0, ..., lambda_{N-1}, gamma_{N-1}, A_{N-1}].
+                Unused peak slots are zero-padded.
+            pca_artifacts (dict): output of extract_pca containing at least
+                'mean' (L,), 'components' (K, L), 'wl' (L,).
             normalize_geom (bool, optional): Defaults to True.
             normalize_pca (bool, optional): Defaults to False. When True, each PC
-                channel is standardized to zero-mean unit-variance so the MSE loss
-                weights all components equally during training (PC0 otherwise
-                dominates because its variance is much larger than later PCs).
+                channel is standardized to zero-mean unit-variance.
             normalize_amp (bool, optional): Defaults to True. When True, each
-                peak-target channel is standardized using stats computed over the
-                masked (peak-present) rows only, so zero-padded rows do not
-                bias the mean/std.
+                peak's (lambda, gamma, A) triple is standardized using stats
+                computed *only* over rows where that specific peak is present,
+                so zero-padded slots do not bias the stats.
         """
 
         # Force matching order
@@ -60,12 +57,16 @@ class PCAPeakDataset(Dataset):
         amp_df = amp_df.loc[geom_df.index]
 
         # Convert to numpy
-        geom_np = geom_df.values.astype(np.float32)     # (S, 4)
+        geom_np = geom_df.values.astype(np.float32)     # (S, geom_dim)
         pca_np  = pca_df.values.astype(np.float32)      # (S, K)
-        amp_np  = amp_df.values.astype(np.float32)      # (S, 3)
+        amp_np  = amp_df.values.astype(np.float32)      # (S, 3N)
+
+        assert amp_np.shape[1] % 3 == 0, \
+            f"amp_df must have 3N columns (got {amp_np.shape[1]})"
 
         # Config
         self.K = pca_np.shape[1]
+        self.n_peaks = amp_np.shape[1] // 3
         self.normalize_geom = normalize_geom
         self.normalize_pca = normalize_pca
         self.normalize_amp = normalize_amp
@@ -76,10 +77,11 @@ class PCAPeakDataset(Dataset):
         self.pca_components = pca_artifacts['components'][:self.K].astype(np.float32)
         self.wl = pca_artifacts['wl']
 
-        # Mask must be computed from RAW amp targets, before any normalization
-        # shifts zero-padded rows away from zero. (S, 1) so it broadcasts cleanly
-        # against per-sample peak losses.
-        mask_np = (amp_np.sum(axis=1) != 0).astype(np.float32).reshape(-1, 1)
+        # Per-peak mask of shape (S, N): a peak is "present" if any of its three
+        # raw values is nonzero. Built from RAW amp targets, before normalization
+        # can shift zero-padded rows away from zero.
+        amp_reshaped = amp_np.reshape(-1, self.n_peaks, 3)          # (S, N, 3)
+        mask_np = (np.abs(amp_reshaped).sum(axis=2) != 0).astype(np.float32)  # (S, N)
 
         # Normalize geometry
         if normalize_geom:
@@ -100,38 +102,42 @@ class PCAPeakDataset(Dataset):
             self.pca_norm_mean = None
             self.pca_norm_std  = None
 
-        # Normalize peak targets (per-channel standardization).
-        # Stats are computed over peak-present rows only so that zero-padded
-        # no-peak rows don't bias them. The mask gates the loss so the
-        # standardized pad-row values are never seen by the optimizer.
+        # Normalize peak targets (per-peak, per-channel standardization).
+        # For each peak k, compute stats using only the rows where peak k is
+        # present; apply to columns [3k, 3k+1, 3k+2]. Zero-padded slots will
+        # take non-meaningful normalized values but the mask gates the loss,
+        # so those never affect training.
         if normalize_amp:
-            valid = mask_np.squeeze(1).astype(bool)
-            if valid.any():
-                self.amp_mean = amp_np[valid].mean(axis=0).astype(np.float32)
-                self.amp_std  = (amp_np[valid].std(axis=0) + 1e-8).astype(np.float32)
-            else:
-                self.amp_mean = np.zeros(amp_np.shape[1], dtype=np.float32)
-                self.amp_std  = np.ones(amp_np.shape[1], dtype=np.float32)
+            amp_mean = np.zeros(3 * self.n_peaks, dtype=np.float32)
+            amp_std  = np.ones(3 * self.n_peaks, dtype=np.float32)
+            for peak_k in range(self.n_peaks):
+                valid = mask_np[:, peak_k].astype(bool)
+                cols = slice(3 * peak_k, 3 * (peak_k + 1))
+                if valid.any():
+                    amp_mean[cols] = amp_np[valid, cols].mean(axis=0)
+                    amp_std[cols]  = amp_np[valid, cols].std(axis=0) + 1e-8
+            self.amp_mean = amp_mean
+            self.amp_std  = amp_std
             amp_np = (amp_np - self.amp_mean) / self.amp_std
         else:
             self.amp_mean = None
             self.amp_std  = None
 
         # Convert to tensors
-        self.geom = torch.tensor(geom_np, dtype=torch.float32)   # (S, 4)
+        self.geom = torch.tensor(geom_np, dtype=torch.float32)   # (S, geom_dim)
         self.pca  = torch.tensor(pca_np,  dtype=torch.float32)   # (S, K)
-        self.amp  = torch.tensor(amp_np,  dtype=torch.float32)   # (S, 3)
-        self.mask = torch.tensor(mask_np, dtype=torch.float32)   # (S, 1)
+        self.amp  = torch.tensor(amp_np,  dtype=torch.float32)   # (S, 3N)
+        self.mask = torch.tensor(mask_np, dtype=torch.float32)   # (S, N)
 
     def __len__(self):
         return len(self.geom)
 
     def __getitem__(self, idx):
         return (
-            self.geom[idx],   # geometry (4,)
+            self.geom[idx],   # geometry (geom_dim,)
             self.pca[idx],    # PCA coefficients (K,)
-            self.amp[idx],    # max-amp peak target (lambda, gamma, A) (3,)
-            self.mask[idx],   # peak-present flag (1,)
+            self.amp[idx],    # peak targets (3N,)
+            self.mask[idx],   # per-peak mask (N,)
         )
 
     def denormalize_pca(self, y: torch.Tensor) -> torch.Tensor:
@@ -149,10 +155,10 @@ class PCAPeakDataset(Dataset):
 
     def denormalize_amp(self, y: torch.Tensor) -> torch.Tensor:
         """
-        Map normalized peak targets back to raw (lambda, gamma, A) space.
+        Map normalized peak targets back to raw (lambda, gamma, A, ...) space.
 
         Args:
-            y (torch.Tensor): shape (..., 3)
+            y (torch.Tensor): shape (..., 3N)
         """
         if not self.normalize_amp:
             return y
