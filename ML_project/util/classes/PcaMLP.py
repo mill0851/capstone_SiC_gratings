@@ -16,10 +16,22 @@ class PcaMLP(nn.Module):
     over different PCA truncations (K=10, 20, 30, ...).
     """
 
-    def __init__(self, K: int, hidden_dim: int, n_layers: int, p: float, input_dim: int = 4):
+    def __init__(
+        self,
+        K: int,
+        hidden_dim: int,
+        n_layers: int,
+        p: float,
+        input_dim: int = 4,
+        peak_weighted_loss: bool = False,
+    ):
         super().__init__()
 
         self.K = K
+        # When True, train_pca_regression / train_pca_regression_final apply a
+        # per-sample weighted MSE using weights supplied via PCADataset
+        # (set_sample_weights). When False (default), behaviour is unchanged.
+        self.peak_weighted_loss = peak_weighted_loss
 
         layers = []
 
@@ -43,6 +55,21 @@ class PcaMLP(nn.Module):
         return reg
 
 
+def _unpack_batch(batch):
+    """Loaders may yield (geom, feat) or (geom, feat, weight) depending on
+    whether the underlying dataset has sample_weights set."""
+    if len(batch) == 3:
+        return batch[0], batch[1], batch[2]
+    return batch[0], batch[1], None
+
+
+def _coeff_loss(pred, feat, weight, weighted: bool):
+    if weighted and weight is not None:
+        per_sample = ((pred - feat) ** 2).mean(dim=1)
+        return (per_sample * weight).mean()
+    return ((pred - feat) ** 2).mean()
+
+
 def train_pca_regression(
         model: PcaMLP,
         dataset: PCADataset,
@@ -52,7 +79,8 @@ def train_pca_regression(
         lr: float,
         wd: float,
         patience: int,
-        path: str):
+        path: str,
+        on_epoch_end=None):
     """
     Train a PcaMLP to regress K PCA coefficients from 4D geometry.
     Mirrors RegMLP.train_regression but without the per-sample mask:
@@ -67,12 +95,11 @@ def train_pca_regression(
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=10
     )
-    mse = nn.MSELoss()
+    weighted = bool(getattr(model, 'peak_weighted_loss', False))
 
     history = {
         "train_loss": [],
         "val_loss": [],
-        "train_loss_recon": [],
         "val_loss_recon": [],
         "stop_epoch": 0,
         "K": model.K
@@ -85,13 +112,13 @@ def train_pca_regression(
         # Training loop
         model.train()
         train_reg_loss = 0.0
-        train_recon_loss = 0.0
         train_samples = 0
 
-        for geom, feat in train_loader:
+        for batch in train_loader:
+            geom, feat, w = _unpack_batch(batch)
             optimizer.zero_grad()
             reg_pred = model(geom)
-            loss_reg = mse(reg_pred, feat)
+            loss_reg = _coeff_loss(reg_pred, feat, w, weighted)
 
             loss_reg.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
@@ -101,22 +128,18 @@ def train_pca_regression(
             train_reg_loss += loss_reg.item() * batch_n
             train_samples += batch_n
 
-            with torch.no_grad():
-                recon_pred = dataset.reconstruct_spectrum(reg_pred.detach())
-                recon_true = dataset.reconstruct_spectrum(feat)
-                loss_recon = ((recon_pred - recon_true) ** 2).mean()
-                train_recon_loss += loss_recon.item() * batch_n
-
-        # Validation loop
+        # Validation loop. Val metrics are reported unweighted so they remain
+        # comparable across runs with/without peak_weighted_loss.
         model.eval()
         val_reg_loss = 0.0
         val_recon_loss = 0.0
         val_samples = 0
 
         with torch.no_grad():
-            for geom, feat in val_loader:
+            for batch in val_loader:
+                geom, feat, _ = _unpack_batch(batch)
                 reg_pred = model(geom)
-                loss_reg = mse(reg_pred, feat)
+                loss_reg = ((reg_pred - feat) ** 2).mean()
 
                 recon_pred = dataset.reconstruct_spectrum(reg_pred)
                 recon_true = dataset.reconstruct_spectrum(feat)
@@ -129,12 +152,10 @@ def train_pca_regression(
 
         train_reg_loss /= max(train_samples, 1)
         val_reg_loss /= max(val_samples, 1)
-        train_recon_loss /= max(train_samples, 1)
         val_recon_loss /= max(val_samples, 1)
 
         history["train_loss"].append(train_reg_loss)
         history["val_loss"].append(val_reg_loss)
-        history["train_loss_recon"].append(train_recon_loss)
         history["val_loss_recon"].append(val_recon_loss)
 
         # print(f"Epoch {epoch+1:03d} | K={model.K:3d} | "
@@ -164,6 +185,11 @@ def train_pca_regression(
 
         scheduler.step(val_recon_loss)
 
+        if on_epoch_end is not None:
+            stop = on_epoch_end(epoch, val_recon_loss, best_recon_loss, val_reg_loss)
+            if stop:
+                break
+
     checkpoint = torch.load(f"{path}/best_pca_reg.pt", weights_only=False)
     model.load_state_dict(checkpoint["model_state_dict"])
     return model.state_dict(), checkpoint["history"]
@@ -192,7 +218,7 @@ def train_pca_regression_final(
         optimizer, mode='min', factor=0.5, patience=15,
         threshold=1e-3, threshold_mode='rel'
     )
-    mse = nn.MSELoss()
+    weighted = bool(getattr(model, 'peak_weighted_loss', False))
 
     history = {
         "train_loss": [],
@@ -209,10 +235,11 @@ def train_pca_regression_final(
         train_recon_loss = 0.0
         train_samples = 0
 
-        for geom, feat in train_loader:
+        for batch in train_loader:
+            geom, feat, w = _unpack_batch(batch)
             optimizer.zero_grad()
             reg_pred = model(geom)
-            loss_reg = mse(reg_pred, feat)
+            loss_reg = _coeff_loss(reg_pred, feat, w, weighted)
 
             loss_reg.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)

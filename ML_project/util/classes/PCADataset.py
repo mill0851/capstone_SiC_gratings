@@ -84,14 +84,52 @@ class PCADataset(Dataset):
         self.geom = torch.tensor(geom_np, dtype=torch.float32)   # (S, 4)
         self.feat = torch.tensor(feat_np, dtype=torch.float32)   # (S, K)
 
+        # Optional per-sample loss weights. When None, __getitem__ yields
+        # (geom, feat); when set, yields (geom, feat, weight) so trainers can
+        # apply a weighted MSE without re-plumbing the dataloader pipeline.
+        self.sample_weights: torch.Tensor | None = None
+
+        # Cached PCA tensors for reconstruct_spectrum — avoids torch.tensor(np)
+        # allocation on every batch (called O(1e8) times across an HPO run).
+        self._pca_mean_t  = torch.from_numpy(self.pca_mean)
+        self._pca_comps_t = torch.from_numpy(self.pca_components)
+        if self.feat_mean is not None:
+            self._feat_mean_t = torch.from_numpy(self.feat_mean)
+            self._feat_std_t  = torch.from_numpy(self.feat_std)
+        else:
+            self._feat_mean_t = None
+            self._feat_std_t  = None
+
     def __len__(self):
         return len(self.geom)
 
     def __getitem__(self, idx):
+        if self.sample_weights is None:
+            return (
+                self.geom[idx],   # geometry (4,)
+                self.feat[idx]    # PCA coefficients (K,)
+            )
         return (
-            self.geom[idx],   # geometry (4,)
-            self.feat[idx]    # PCA coefficients (K,)
+            self.geom[idx],
+            self.feat[idx],
+            self.sample_weights[idx],
         )
+
+    def set_sample_weights(self, weights):
+        """
+        Attach per-sample loss weights (shape (S,)). After this, __getitem__
+        yields (geom, feat, weight) and the PcaMLP trainers will pick them up
+        when the model has peak_weighted_loss=True.
+        """
+        if weights is None:
+            self.sample_weights = None
+            return
+        w = torch.as_tensor(weights, dtype=torch.float32)
+        if w.shape[0] != self.geom.shape[0]:
+            raise ValueError(
+                f"weights length {w.shape[0]} != dataset length {self.geom.shape[0]}"
+            )
+        self.sample_weights = w
 
     def denormalize_feature(self, y: torch.Tensor) -> torch.Tensor:
         """
@@ -102,8 +140,8 @@ class PCADataset(Dataset):
         """
         if not self.normalize_feat:
             return y
-        mean = torch.tensor(self.feat_mean, dtype=y.dtype, device=y.device)
-        std  = torch.tensor(self.feat_std,  dtype=y.dtype, device=y.device)
+        mean = self._feat_mean_t.to(dtype=y.dtype, device=y.device)
+        std  = self._feat_std_t.to(dtype=y.dtype, device=y.device)
         return y * std + mean
 
     def reconstruct_spectrum(self, y: torch.Tensor) -> torch.Tensor:
@@ -118,6 +156,6 @@ class PCADataset(Dataset):
             torch.Tensor: shape (..., L) spectrum on self.wl
         """
         coeffs = self.denormalize_feature(y)
-        mean = torch.tensor(self.pca_mean, dtype=y.dtype, device=y.device)
-        comps = torch.tensor(self.pca_components, dtype=y.dtype, device=y.device)
+        mean = self._pca_mean_t.to(dtype=y.dtype, device=y.device)
+        comps = self._pca_comps_t.to(dtype=y.dtype, device=y.device)
         return mean + coeffs @ comps

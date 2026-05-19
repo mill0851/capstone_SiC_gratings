@@ -129,6 +129,23 @@ class PCAPeakDataset(Dataset):
         self.amp  = torch.tensor(amp_np,  dtype=torch.float32)   # (S, 3N)
         self.mask = torch.tensor(mask_np, dtype=torch.float32)   # (S, N)
 
+        # Cached PCA + normalization tensors — avoids torch.tensor(np) on every
+        # batch.
+        self._pca_mean_t  = torch.from_numpy(self.pca_spec_mean)
+        self._pca_comps_t = torch.from_numpy(self.pca_components)
+        if self.pca_norm_mean is not None:
+            self._pca_norm_mean_t = torch.from_numpy(self.pca_norm_mean)
+            self._pca_norm_std_t  = torch.from_numpy(self.pca_norm_std)
+        else:
+            self._pca_norm_mean_t = None
+            self._pca_norm_std_t  = None
+        if self.amp_mean is not None:
+            self._amp_mean_t = torch.from_numpy(self.amp_mean)
+            self._amp_std_t  = torch.from_numpy(self.amp_std)
+        else:
+            self._amp_mean_t = None
+            self._amp_std_t  = None
+
     def __len__(self):
         return len(self.geom)
 
@@ -149,8 +166,8 @@ class PCAPeakDataset(Dataset):
         """
         if not self.normalize_pca:
             return y
-        mean = torch.tensor(self.pca_norm_mean, dtype=y.dtype, device=y.device)
-        std  = torch.tensor(self.pca_norm_std,  dtype=y.dtype, device=y.device)
+        mean = self._pca_norm_mean_t.to(dtype=y.dtype, device=y.device)
+        std  = self._pca_norm_std_t.to(dtype=y.dtype, device=y.device)
         return y * std + mean
 
     def denormalize_amp(self, y: torch.Tensor) -> torch.Tensor:
@@ -162,8 +179,8 @@ class PCAPeakDataset(Dataset):
         """
         if not self.normalize_amp:
             return y
-        mean = torch.tensor(self.amp_mean, dtype=y.dtype, device=y.device)
-        std  = torch.tensor(self.amp_std,  dtype=y.dtype, device=y.device)
+        mean = self._amp_mean_t.to(dtype=y.dtype, device=y.device)
+        std  = self._amp_std_t.to(dtype=y.dtype, device=y.device)
         return y * std + mean
 
     def reconstruct_spectrum(self, y: torch.Tensor) -> torch.Tensor:
@@ -178,6 +195,6 @@ class PCAPeakDataset(Dataset):
             torch.Tensor: shape (..., L) spectrum on self.wl
         """
         coeffs = self.denormalize_pca(y)
-        mean = torch.tensor(self.pca_spec_mean, dtype=y.dtype, device=y.device)
-        comps = torch.tensor(self.pca_components, dtype=y.dtype, device=y.device)
+        mean = self._pca_mean_t.to(dtype=y.dtype, device=y.device)
+        comps = self._pca_comps_t.to(dtype=y.dtype, device=y.device)
         return mean + coeffs @ comps
